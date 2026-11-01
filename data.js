@@ -9,14 +9,14 @@ const MAPS = [
   { id: 'Bind',     zh: '源工重镇', img: '/maps/bind.webp' },
   { id: 'Haven',    zh: '隐世修所', img: '/maps/haven.webp' },
   { id: 'Split',    zh: '霓虹町', img: '/maps/split.webp' },
-  { id: 'Icebox',   zh: '森寒冬港' },
+  { id: 'Icebox',   zh: '森寒冬港', img: '/maps/icebox.webp' },
   { id: 'Breeze',   zh: '微风岛屿', img: '/maps/breeze.webp' },
-  { id: 'Fracture', zh: '裂变峡谷' },
+  { id: 'Fracture', zh: '裂变峡谷', img: '/maps/fracture.webp' },
   { id: 'Pearl',    zh: '深海明珠', img: '/maps/pearl.webp' },
   { id: 'Lotus',    zh: '莲华古城', img: '/maps/lotus.webp' },
   { id: 'Sunset',   zh: '日落之城', img: '/maps/sunset.webp' },
   { id: 'Abyss',    zh: '幽邃地窟', img: '/maps/abyss.webp' },
-  { id: 'Corrode',  zh: '盐海矿镇' },
+  { id: 'Corrode',  zh: '盐海矿镇', img: '/maps/corrode.webp' },
 ];
 
 // 创建房间时默认勾选的地图池（7 张）。按当前竞技地图池修改即可。
