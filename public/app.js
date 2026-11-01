@@ -133,6 +133,7 @@
 
   // ---------- 房间页 ----------
   const claimDraft = {};
+  let noRoomRetries = 0;
   let ws, role = 'spec', isAdmin = false, S = null, clockTimer = null, skew = 0, retry = 0, prevCursor = -1;
   const roomId = location.pathname.split('/')[2];
   const seatKey = 'vbp-seat-' + roomId, adminKey = 'vbp-admin-' + roomId;
@@ -151,6 +152,7 @@
       }
       else if (msg.type === 'state') { S = msg.state; skew = S.serverNow - Date.now(); render(); }
       else if (msg.type === 'error') {
+        if (msg.code === 'no_room' && noRoomRetries++ < 2) { setTimeout(() => ws.send(JSON.stringify({ type: 'join', room: roomId, token: store.get(seatKey), adminToken: store.get(adminKey) })), 1500); return; }
         if (msg.code === 'no_room') { $('room').hidden = true; $('missing').hidden = false; ws.onclose = null; ws.close(); setConn(null); }
         else toast(msg.message);
       }

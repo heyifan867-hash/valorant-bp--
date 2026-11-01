@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { MAPS, DEFAULT_POOL, AGENTS } = require('./data');
+const { createStore } = require('./persist');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOM_TTL_MS = 12 * 60 * 60 * 1000;   // 房间 12 小时无活动后清理
@@ -19,6 +20,8 @@ const AGENT_IDS = new Set(AGENTS.map(a => a.id));
 const FORMAT_PICKS = { bo1: 0, bo3: 2, bo5: 4 };
 
 const rooms = new Map();
+const store = createStore({ ttlMs: ROOM_TTL_MS });
+store.bind?.(() => [...rooms.values()]);
 const DEFAULT_NAMES = { A: 'A 方', B: 'B 方' };
 
 // ---------- 工具 ----------
@@ -115,6 +118,7 @@ function createRoom(body) {
   };
   resetRoom(room);
   rooms.set(id, room);
+  store.save(room);
   return room;
 }
 
@@ -136,11 +140,11 @@ function startMatch(room) {
   }
 }
 
-function armDiceTimer(room) {
+function armDiceTimer(room, remainingMs) {
   clearTimeout(room.timerHandle);
   room.deadline = null;
   if (room.config.timer <= 0) return;
-  const ms = room.config.timer * 1000;
+  const ms = remainingMs ?? room.config.timer * 1000;
   room.deadline = Date.now() + ms;
   const round = room.dice.round;
   room.timerHandle = setTimeout(() => {
@@ -165,8 +169,7 @@ function rollDice(room, team, auto = false) {
     clearTimeout(room.timerHandle); room.deadline = null;
     room.timerHandle = setTimeout(() => {
       if (room.status !== 'dice' || d.round !== round) return;
-      d.A = d.B = null; d.Aauto = d.Bauto = false; d.round++;
-      armDiceTimer(room); broadcast(room);
+      nextDiceRound(room); broadcast(room);
     }, 2600);
     return null;
   }
@@ -180,6 +183,12 @@ function rollDice(room, team, auto = false) {
     advance(room); broadcast(room);
   }, 3200);
   return null;
+}
+
+function nextDiceRound(room) {
+  const d = room.dice;
+  d.A = d.B = null; d.Aauto = d.Bauto = false; d.round++;
+  armDiceTimer(room);
 }
 
 function resetRoom(room) {
@@ -204,17 +213,33 @@ function advance(room) {
     room.status = 'done';
     return;
   }
-  if (room.config.timer > 0) {
-    const ms = room.config.timer * 1000;
-    room.deadline = Date.now() + ms;
-    const at = room.cursor;
-    room.timerHandle = setTimeout(() => {
-      if (room.status !== 'running' || room.cursor !== at) return;
-      const step = room.steps[at];
-      applyAction(room, step.team, pickRandom(optionsFor(room, step)), true);
-      broadcast(room);
-    }, ms + 300);
+  if (room.config.timer > 0) armStepTimer(room, room.config.timer * 1000);
+}
+
+function armStepTimer(room, ms) {
+  clearTimeout(room.timerHandle);
+  room.deadline = Date.now() + ms;
+  const at = room.cursor;
+  room.timerHandle = setTimeout(() => {
+    if (room.status !== 'running' || room.cursor !== at) return;
+    const step = room.steps[at];
+    applyAction(room, step.team, pickRandom(optionsFor(room, step)), true);
+    broadcast(room);
+  }, ms + 300);
+}
+
+// 服务器重启后恢复房间：按剩余时间重新挂上倒计时
+function restoreRoom(data) {
+  const room = { ...data, clients: new Set(), timerHandle: null };
+  const left = room.deadline ? Math.max(3000, room.deadline - Date.now()) : null;
+  if (room.status === 'running' && left) armStepTimer(room, left);
+  if (room.status === 'dice' && room.dice) {
+    const d = room.dice;
+    if (d.winner) room.timerHandle = setTimeout(() => { room.status = 'running'; advance(room); broadcast(room); }, 1500);
+    else if (d.A != null && d.B != null) room.timerHandle = setTimeout(() => { nextDiceRound(room); broadcast(room); }, 1500);
+    else armDiceTimer(room, left ?? undefined);
   }
+  rooms.set(room.id, room);
 }
 
 function applyAction(room, team, value, auto = false) {
@@ -254,6 +279,11 @@ function send(ws, msg) {
   if (ws.readyState === 1) ws.send(JSON.stringify(msg));
 }
 function broadcast(room) {
+  // 每次状态变化都存一次（同一轮事件里合并成一次写入）
+  if (!room.saveQueued) {
+    room.saveQueued = true;
+    setImmediate(() => { room.saveQueued = false; if (rooms.has(room.id)) store.save(room); });
+  }
   const state = publicState(room);
   for (const c of room.clients) send(c.ws, { type: 'state', state });
 }
@@ -415,11 +445,24 @@ setInterval(() => {
     if (room.clients.size === 0 && now - room.touchedAt > ROOM_TTL_MS) {
       clearTimeout(room.timerHandle);
       rooms.delete(id);
+      store.remove(id);
     }
   }
 }, 30e3).unref();
 
-if (require.main === module) {
+async function main() {
+  try {
+    const saved = await store.loadAll();
+    const now = Date.now();
+    for (const r of saved) if (r && r.id && now - (r.touchedAt || 0) < ROOM_TTL_MS) restoreRoom(r);
+    console.log(`[persist] 恢复了 ${rooms.size} 个房间`);
+  } catch (e) {
+    console.log('[persist] 读取失败，从空白开始：' + e.message);
+  }
   server.listen(PORT, () => console.log(`Valorant BP 已启动: http://localhost:${PORT}`));
 }
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, async () => { await store.flush(); process.exit(0); });
+}
+if (require.main === module) main();
 module.exports = { server, buildSteps };

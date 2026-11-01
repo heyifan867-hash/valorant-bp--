@@ -66,11 +66,20 @@ docker run -d --restart=always -p 3000:3000 --name valorant-bp valorant-bp
 
 缺点：国内访问可能慢或不稳定；Render 免费版闲置后会休眠，第一次打开要等几十秒。
 
+## Render 上保存房间（必做）
+
+Render 免费版每次部署、重启或休眠唤醒，内存和本地文件都会清空，所以要接一个免费的 Key Value：
+
+1. Render 后台 **+ New → Key Value**，Name 随便填（如 `vbp-kv`），Region 选和网站一样的 **Singapore**，Instance Type 选 **Free**，创建
+2. 创建好后，在它的页面复制 **Internal Key Value URL**（`redis://` 开头）
+3. 打开网站服务 `valorant-bp` → **Environment** → 添加变量 `REDIS_URL`，值粘贴刚才的地址 → 保存，Render 会自动重新部署
+4. 部署日志里看到 `[persist] 使用 Redis 保存房间` 就成功了
+
 ## 自定义
 
 - **地图池、新地图、新特工**：改 `data.js`。`DEFAULT_POOL` 是建房时默认勾选的地图
 - **BP 顺序规则**：在 `server.js` 的 `buildSteps()` 里
-- **房间保存在内存里**：服务器重启后房间会清空。房间 12 小时没人使用也会自动清理
+- **房间保存**：每次操作都会保存。设置了环境变量 `REDIS_URL` 就存到 Redis（推荐，Render 上用免费的 Key Value）；没设置就存到 `data/rooms.json`。服务器重启、重新部署、休眠唤醒后房间自动恢复，大家的页面会自动重连。房间 12 小时没人使用会自动清理
 
 ## 说明
 
