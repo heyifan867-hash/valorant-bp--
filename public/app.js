@@ -218,7 +218,7 @@
     const rb = $('roleBadge');
     rb.className = 'badge ' + (isPlayer() ? role : '');
     rb.textContent = isPlayer() ? `你是 ${teamName(role)}${isAdmin ? ' · 房主' : ''}` : isAdmin ? '房主 · 未入座' : `观战 · ${S.online.spec} 人在看`;
-    document.title = `${teamName('A')} vs ${teamName('B')} · VETO 房间`;
+    document.title = `${teamName('A')} vs ${teamName('B')} · 蓝猫电竞 BP`;
 
     // 回合条
     const turn = $('turn');

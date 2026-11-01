@@ -369,3 +369,22 @@ input:focus, select:focus { border-color: var(--fg); }
 }
 .code-box .btn { white-space: nowrap; }
 @media (max-width: 560px) { .code-box .btn { flex: 0 0 auto; } }
+
+/* ---------- 蓝猫电竞品牌 ---------- */
+:root { --cat: #066497; --cat-light: #3d9bd1; }
+.brand { gap: 10px; letter-spacing: 0; }
+.brand-tile { flex: none; display: grid; place-items: center; width: 36px; height: 36px; background: #fff; border-radius: 7px; padding: 4px; }
+.brand-tile img { width: 100%; height: 100%; object-fit: contain; }
+.brand-name { font: 800 18px/1 var(--body); letter-spacing: .06em; }
+.brand-sub { font: 700 11px/1 var(--display); letter-spacing: .12em; color: var(--cat-light); border: 1px solid currentColor; padding: 4px 6px; }
+.hero { display: flex; align-items: center; gap: 28px; max-width: 860px; }
+.hero-logo { flex: none; width: 150px; aspect-ratio: 1; max-width: 100%; background: #fff; border-radius: 14px; padding: 14px; display: grid; place-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.hero-logo img { width: 100%; height: 100%; object-fit: contain; }
+.hero-text { min-width: 0; }
+.eyebrow { color: var(--cat-light); }
+@media (max-width: 560px) {
+  .hero { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .hero-logo { width: 96px; padding: 9px; border-radius: 10px; }
+  .brand-tile { width: 32px; height: 32px; }
+  .brand-name { font-size: 16px; }
+}
