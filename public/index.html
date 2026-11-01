@@ -46,7 +46,7 @@
 
     <div class="field-grid">
       <label class="field"><span>先手</span>
-        <select id="first"><option value="A">A 队先手</option><option value="B">B 队先手</option><option value="random">随机（硬币）</option></select>
+        <select id="first"><option value="dice" selected>摇骰子决定</option><option value="random">随机（硬币）</option><option value="A">A 队先手</option><option value="B">B 队先手</option></select>
       </label>
       <label class="field"><span>每步限时</span>
         <select id="timer"><option value="0">不限时</option><option value="20">20 秒</option><option value="30" selected>30 秒</option><option value="45">45 秒</option><option value="60">60 秒</option><option value="90">90 秒</option></select>
@@ -72,6 +72,8 @@
     <div class="team team-B"><small id="statB"></small><b id="nameB"></b><span class="team-tag">B</span></div>
   </section>
 
+  <section class="strip" id="strip" aria-label="地图 BP 进度"></section>
+
   <section id="turn" class="turn">
     <div class="turn-text"><span id="turnTitle"></span><span id="turnSub"></span></div>
     <div class="turn-clock" id="clock" hidden></div>
@@ -92,6 +94,19 @@
       <button class="btn primary" id="readyBtn" hidden>准备</button>
       <button class="btn ghost" id="forceStart" hidden>不等了，直接开始</button>
     </div>
+  </section>
+
+  <section id="dicePanel" class="dice-panel" hidden>
+    <h2>摇<em>骰子</em>决定 BP 顺序</h2>
+    <div class="dice-score">
+      <div class="ds A"><small id="dsNameA"></small><b id="dsA">?</b></div>
+      <span class="colon">:</span>
+      <div class="ds B"><small id="dsNameB"></small><b id="dsB">?</b></div>
+    </div>
+    <div class="cube-stage"><div class="cube" id="cube"></div></div>
+    <p class="dice-msg" id="diceMsg"></p>
+    <p class="hint">规则：点数大的一方先手，平局重摇。</p>
+    <button class="btn primary roll" id="rollBtn" hidden>摇骰子</button>
   </section>
 
   <div class="board">

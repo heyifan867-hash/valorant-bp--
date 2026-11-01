@@ -89,11 +89,11 @@ function createRoom(body) {
   if (pool.length > MAPS.length) pool = pool.slice(0, MAPS.length);
   const agentBans = Math.max(0, Math.min(4, Number(body.agentBans) | 0));
   const timer = [0, 20, 30, 45, 60, 90].includes(Number(body.timer)) ? Number(body.timer) : 30;
-  let first = body.first === 'B' ? 'B' : body.first === 'random' ? pickRandom(['A', 'B']) : 'A';
+  const firstMode = ['A', 'B', 'random', 'dice'].includes(body.first) ? body.first : 'dice';
 
   const config = {
-    format, pool, agentBans, timer, first,
-    firstWasRandom: body.first === 'random',
+    format, pool, agentBans, timer, firstMode,
+    first: null,
     teamNames: { A: cleanName(body.teamA, '队伍 A'), B: cleanName(body.teamB, '队伍 B') },
   };
   let id;
@@ -101,9 +101,10 @@ function createRoom(body) {
   const room = {
     id, config,
     tokens: { A: randId(12), B: randId(12), admin: randId(12) },
-    steps: buildSteps(config),
+    steps: [],
     cursor: 0,
-    status: 'waiting',            // waiting | running | done
+    status: 'waiting',            // waiting | dice | running | done
+    dice: null,
     ready: { A: false, B: false },
     deadline: null,
     timerHandle: null,
@@ -111,13 +112,79 @@ function createRoom(body) {
     createdAt: Date.now(),
     touchedAt: Date.now(),
   };
+  resetRoom(room);
   rooms.set(id, room);
   return room;
 }
 
+// 先手：固定 / 随机硬币时建房即确定；摇骰子模式在双方准备后才确定
+function decideFirstUpfront(room) {
+  const m = room.config.firstMode;
+  room.config.first = m === 'A' || m === 'B' ? m : m === 'random' ? pickRandom(['A', 'B']) : null;
+  room.steps = room.config.first ? buildSteps(room.config) : [];
+}
+
+function startMatch(room) {
+  if (room.config.firstMode === 'dice' && !room.config.first) {
+    room.status = 'dice';
+    room.dice = { A: null, B: null, round: 1, ties: [], winner: null };
+    armDiceTimer(room);
+  } else {
+    room.status = 'running';
+    advance(room);
+  }
+}
+
+function armDiceTimer(room) {
+  clearTimeout(room.timerHandle);
+  room.deadline = null;
+  if (room.config.timer <= 0) return;
+  const ms = room.config.timer * 1000;
+  room.deadline = Date.now() + ms;
+  const round = room.dice.round;
+  room.timerHandle = setTimeout(() => {
+    if (room.status !== 'dice' || room.dice.round !== round || room.dice.winner) return;
+    for (const t of ['A', 'B']) if (room.dice[t] == null) rollDice(room, t, true);
+    broadcast(room);
+  }, ms + 300);
+}
+
+function rollDice(room, team, auto = false) {
+  const d = room.dice;
+  if (room.status !== 'dice' || d.winner) return '现在不能摇骰子';
+  if (d[team] != null) return '你已经摇过了';
+  d[team] = crypto.randomInt(1, 7);
+  d[team + 'auto'] = auto;
+  room.touchedAt = Date.now();
+  if (d.A == null || d.B == null) return null;
+  if (d.A === d.B) {
+    // 平局：留出动画时间后清空重摇
+    d.ties.push([d.A, d.B]);
+    const round = d.round;
+    clearTimeout(room.timerHandle); room.deadline = null;
+    room.timerHandle = setTimeout(() => {
+      if (room.status !== 'dice' || d.round !== round) return;
+      d.A = d.B = null; d.Aauto = d.Bauto = false; d.round++;
+      armDiceTimer(room); broadcast(room);
+    }, 2600);
+    return null;
+  }
+  d.winner = d.A > d.B ? 'A' : 'B';
+  room.config.first = d.winner;
+  room.steps = buildSteps(room.config);
+  clearTimeout(room.timerHandle); room.deadline = null;
+  room.timerHandle = setTimeout(() => {
+    if (room.status !== 'dice') return;
+    room.status = 'running';
+    advance(room); broadcast(room);
+  }, 3200);
+  return null;
+}
+
 function resetRoom(room) {
   clearTimeout(room.timerHandle);
-  room.steps = buildSteps(room.config);
+  decideFirstUpfront(room);
+  room.dice = null;
   room.cursor = 0;
   room.status = 'waiting';
   room.ready = { A: false, B: false };
@@ -173,6 +240,7 @@ function publicState(room) {
     steps: room.steps.map(({ kind, action, team, mapStep, value, auto }) => ({ kind, action, team, mapStep, value, auto })),
     cursor: room.cursor,
     status: room.status,
+    dice: room.dice,
     ready: room.ready,
     deadline: room.deadline,
     serverNow: Date.now(),
@@ -275,14 +343,16 @@ wss.on('connection', (ws) => {
     if (msg.type === 'ready' && (role === 'A' || role === 'B')) {
       if (room.status !== 'waiting') return;
       room.ready[role] = msg.value !== false;
-      if (room.ready.A && room.ready.B) {
-        room.status = 'running';
-        advance(room);
-      }
+      if (room.ready.A && room.ready.B) startMatch(room);
       return broadcast(room);
     }
     if (msg.type === 'act' && (role === 'A' || role === 'B')) {
       const err = applyAction(room, role, String(msg.value));
+      if (err) return send(ws, { type: 'error', code: 'bad_action', message: err });
+      return broadcast(room);
+    }
+    if (msg.type === 'roll' && (role === 'A' || role === 'B')) {
+      const err = rollDice(room, role);
       if (err) return send(ws, { type: 'error', code: 'bad_action', message: err });
       return broadcast(room);
     }
@@ -292,8 +362,7 @@ wss.on('connection', (ws) => {
     }
     if (msg.type === 'start' && role === 'admin' && room.status === 'waiting') {
       room.ready = { A: true, B: true };
-      room.status = 'running';
-      advance(room);
+      startMatch(room);
       return broadcast(room);
     }
   });

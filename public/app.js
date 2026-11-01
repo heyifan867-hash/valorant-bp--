@@ -196,7 +196,13 @@
     turn.className = 'turn' + (cur && S.status === 'running' ? ' ' + cur.team : '') + (myTurn ? ' mine' : '');
     if (S.status === 'waiting') {
       $('turnTitle').textContent = '等待双方准备';
-      $('turnSub').textContent = S.config.firstWasRandom ? `硬币结果：${teamName(S.config.first)} 先手` : `${teamName(S.config.first)} 先手`;
+      const m = S.config.firstMode;
+      $('turnSub').textContent = m === 'dice' ? '双方准备后摇骰子，点数大的先手'
+        : m === 'random' ? `硬币结果：${teamName(S.config.first)} 先手` : `${teamName(S.config.first)} 先手`;
+    } else if (S.status === 'dice') {
+      const d = S.dice;
+      $('turnTitle').textContent = d.winner ? `${teamName(d.winner)} 先手` : '摇骰子决定 BP 顺序';
+      $('turnSub').textContent = d.winner ? '马上开始禁图…' : isPlayer() ? (d[role] == null ? '点下方按钮摇骰子' : '等待对手摇骰子') : '等待双方摇骰子';
     } else if (S.status === 'done') {
       $('turnTitle').textContent = 'BP 完成';
       $('turnSub').textContent = '结果可以复制发群。';
@@ -238,6 +244,8 @@
     }
     $('adminBox').hidden = role !== 'admin';
 
+    renderStrip(cur);
+    renderDice();
     renderStage(cur, myTurn);
     renderTimeline();
     renderClock();
@@ -245,6 +253,7 @@
 
   function renderStage(cur, myTurn) {
     const states = mapStates();
+    $('mapGrid').closest('.board').hidden = S.status === 'dice';
     const inAgent = S.status === 'running' && cur.kind === 'agent';
     const inSide = S.status === 'running' && cur.kind === 'side';
     const done = S.status === 'done';
@@ -331,6 +340,7 @@
 
   function resultText() {
     const lines = [`【${teamName('A')} vs ${teamName('B')}】${S.config.format.toUpperCase()} BP 结果`];
+    if (S.dice?.winner) lines.push(`摇骰子：${teamName('A')} ${S.dice.A} : ${S.dice.B} ${teamName('B')}，${teamName(S.dice.winner)} 先手`);
     matchMaps().forEach((x, i) => {
       const m = mapById(x.map);
       const atk = x.side.value === 'attack' ? x.side.team : (x.side.team === 'A' ? 'B' : 'A');
@@ -344,21 +354,105 @@
   }
 
   function renderTimeline() {
+    if (!S.steps.length) { $('steps').innerHTML = '<li class="todo" style="display:block">摇完骰子后生成 BP 顺序</li>'; return; }
     $('steps').innerHTML = S.steps.map((st, i) => {
       const t = st.kind === 'decider' ? 'D' : st.team;
       const state = i < S.cursor ? 'done' : (i === S.cursor && S.status === 'running') ? 'now' : 'todo';
-      const who = st.kind === 'decider' ? '自动' : esc(teamName(st.team));
+      const who = st.kind === 'decider' ? '<i>自</i><em>自动</em>' : `<i>${st.team}</i><em>${esc(teamName(st.team))}</em>`;
       const val = st.value ? `<b>${esc(stepValue(st))}</b>${st.auto ? ' <span class="auto">超时随机</span>' : ''}` : esc(stepLabel(st));
       const lbl = st.value ? `${stepLabel(st).replace('选择地图', '选').replace('禁用地图', '禁').replace('禁用特工', '禁').replace('选择阵营', '')} ` : '';
-      return `<li class="${t} ${state}"><span class="who" title="${who}">${who}</span><span>${st.value ? esc(lbl) : ''}${val}</span></li>`;
+      return `<li class="${t} ${state}"><span class="who">${who}</span><span>${st.value ? esc(lbl) : ''}${val}</span></li>`;
     }).join('');
+  }
+
+  // ---------- 顶部地图进度条 ----------
+  function planSlots() {
+    // 骰子还没摇时，步骤未生成：按赛制推出 BAN/PICK 顺序（队伍未知）
+    if (S.steps.length) return S.steps.map((st, i) => ({ st, i })).filter(x => x.st.kind === 'map' || x.st.kind === 'decider');
+    const n = S.config.pool.length, picks = { bo1: 0, bo3: 2, bo5: 4 }[S.config.format];
+    const bans = n - 1 - picks, lead = S.config.format === 'bo1' ? bans : Math.min(2, bans);
+    const order = [...Array(lead).fill('ban'), ...Array(picks).fill('pick'), ...Array(bans - lead).fill('ban')];
+    return [...order.map(a => ({ st: { kind: 'map', action: a } })), { st: { kind: 'decider' } }];
+  }
+  function renderStrip(cur) {
+    const slots = planSlots();
+    const el = $('strip');
+    el.style.setProperty('--n', slots.length);
+    el.innerHTML = slots.map(({ st, i }) => {
+      const t = st.kind === 'decider' ? 'D' : st.team || '';
+      const lbl = st.kind === 'decider' ? 'DECIDER' : st.action === 'ban' ? 'BAN' : 'PICK';
+      const now = S.status === 'running' && i === S.cursor;
+      const cls = `slot ${t} ${st.action || ''}${st.value ? ' filled' : ''}${now ? ' now' : ''}`;
+      return `<div class="${cls}"${st.value ? bgStyle(mapImg(st.value)) : ''}><span class="lbl">${lbl}</span><span class="val">${st.value ? esc(mapById(st.value).zh) : ''}</span></div>`;
+    }).join('');
+  }
+
+  // ---------- 摇骰子 ----------
+  const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
+  const FACE_ROT = { 1: [0, 0], 2: [90, 0], 3: [0, -90], 4: [0, 90], 5: [-90, 0], 6: [0, -180] };
+  let spins = 0, prevDice = null, cubeBuilt = false;
+  function buildCube() {
+    if (cubeBuilt) return; cubeBuilt = true;
+    $('cube').innerHTML = [1, 2, 3, 4, 5, 6].map(n => `<div class="face f${n}">${PIPS[n].map(k =>
+      `<i style="grid-row:${Math.ceil(k / 3)};grid-column:${(k - 1) % 3 + 1}"></i>`).join('')}</div>`).join('');
+  }
+  function rollCube(v) {
+    spins += 2;
+    const [fx, fy] = FACE_ROT[v];
+    $('cube').parentElement.classList.remove('idle');
+    $('cube').style.transform = `rotateX(-25deg) rotateY(35deg) rotateX(${fx + spins * 360}deg) rotateY(${fy + spins * 360}deg)`;
+  }
+  const animating = { A: false, B: false }, flickH = {};
+  function flicker(t, v) {
+    const el = $('ds' + t); let n = 0;
+    animating[t] = true;
+    clearInterval(flickH[t]);
+    flickH[t] = setInterval(() => {
+      if (++n > 12) { clearInterval(flickH[t]); animating[t] = false; renderDice(); return; }
+      el.textContent = 1 + Math.floor(Math.random() * 6);
+    }, 80);
+  }
+  function renderDice() {
+    const panel = $('dicePanel');
+    panel.hidden = S.status !== 'dice';
+    const d = S.dice;
+    if (panel.hidden || !d) { prevDice = d ? { ...d } : null; return; }
+    buildCube();
+    $('dsNameA').textContent = teamName('A');
+    $('dsNameB').textContent = teamName('B');
+    const newRound = !prevDice || prevDice.round !== d.round;
+    for (const t of ['A', 'B']) {
+      const was = newRound ? null : prevDice[t];
+      if (d[t] != null && was == null) {
+        flicker(t, d[t]);
+        if (t === role || !isPlayer()) rollCube(d[t]);
+      }
+      if (d[t] == null) { clearInterval(flickH[t]); animating[t] = false; }
+      if (!animating[t]) $('ds' + t).textContent = d[t] == null ? '?' : d[t];
+    }
+    if (newRound && (!isPlayer() ? d.A == null && d.B == null : d[role] == null)) $('cube').parentElement.classList.add('idle');
+    prevDice = { ...d };
+
+    const bothShown = d.A != null && d.B != null && !animating.A && !animating.B;
+    $('dsA').parentElement.classList.toggle('win', bothShown && d.winner === 'A');
+    $('dsB').parentElement.classList.toggle('win', bothShown && d.winner === 'B');
+    const msg = $('diceMsg');
+    if (bothShown && d.winner) msg.innerHTML = `${teamSpan(d.winner)} 点数大，先手！`;
+    else if (bothShown && d.A === d.B) msg.textContent = `平局 ${d.A} : ${d.B}，马上重摇`;
+    else if (d.ties.length && d.A == null && d.B == null) msg.textContent = `第 ${d.round} 轮（前面平局了）`;
+    else msg.textContent = (d.Aauto || d.Bauto) && bothShown ? '超时的一方由系统代摇' : '';
+
+    const btn = $('rollBtn');
+    btn.hidden = !isPlayer() || !!d.winner;
+    btn.disabled = d[role] != null;
+    btn.textContent = d[role] == null ? '摇骰子' : '等待对手…';
   }
 
   // 倒计时
   function renderClock() {
     clearInterval(clockTimer);
     const clock = $('clock'), bar = $('bar');
-    if (S.status !== 'running' || !S.deadline) { clock.hidden = true; bar.style.width = '0'; return; }
+    if ((S.status !== 'running' && S.status !== 'dice') || !S.deadline) { clock.hidden = true; bar.style.width = '0'; return; }
     clock.hidden = false;
     const total = S.config.timer * 1000;
     const tick = () => {
@@ -387,6 +481,7 @@
     $('room').addEventListener('click', (e) => {
       const c = e.target.closest('[data-copy]'); if (c) copy(c.dataset.copy);
     });
+    $('rollBtn').onclick = () => ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'roll' }));
     $('forceStart').onclick = () => ws.send(JSON.stringify({ type: 'start' }));
     let resetArmed = false;
     $('resetBtn').onclick = () => {
