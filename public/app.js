@@ -3,8 +3,6 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  const ROLE_ZH = { duelist: '决斗', initiator: '先锋', controller: '控场', sentinel: '哨位' };
-  const ROLE_ORDER = ['duelist', 'initiator', 'controller', 'sentinel'];
   const SIDE_ZH = { attack: '进攻', defense: '防守' };
   const FORMAT_HINT = {
     bo1: '双方轮流禁图，剩下最后一张开打，另一方选边。',
@@ -19,9 +17,7 @@
     del(k) { try { localStorage.removeItem(k); } catch {} },
   };
   let META = null;
-  let IMG = { maps: {}, agents: {} };
   const mapById = (id) => META.maps.find(m => m.id === id) || { id, zh: id };
-  const agentById = (id) => META.agents.find(a => a.id === id) || { id, zh: id };
 
   function toast(text) {
     const t = $('toast');
@@ -33,33 +29,7 @@
     catch { window.prompt('复制下面的内容', text); }
   }
 
-  // ---------- 图片（可选增强，国内访问不到也不影响使用） ----------
-  async function loadImages() {
-    const KEY = 'vbp-img-v1';
-    try {
-      const cached = JSON.parse(localStorage.getItem(KEY) || 'null');
-      if (cached && Date.now() - cached.t < 7 * 864e5) { IMG = cached; return true; }
-    } catch {}
-    const get = async (u) => {
-      const ctl = new AbortController(); const h = setTimeout(() => ctl.abort(), 5000);
-      try { const r = await fetch(u, { signal: ctl.signal }); return (await r.json()).data || []; }
-      finally { clearTimeout(h); }
-    };
-    try {
-      const [maps, agents] = await Promise.all([
-        get('https://valorant-api.com/v1/maps'),
-        get('https://valorant-api.com/v1/agents?isPlayableCharacter=true'),
-      ]);
-      const next = { t: Date.now(), maps: {}, agents: {} };
-      for (const m of maps) if (m.displayName) next.maps[m.displayName.toLowerCase()] = m.splash || m.listViewIcon;
-      for (const a of agents) if (a.displayName) next.agents[a.displayName.toLowerCase()] = a.displayIcon;
-      IMG = next;
-      try { localStorage.setItem(KEY, JSON.stringify(next)); } catch {}
-      return true;
-    } catch { return false; }
-  }
-  const mapImg = (id) => mapById(id).img || IMG.maps[id.toLowerCase()];
-  const agentImg = (id) => IMG.agents[id.toLowerCase()];
+  const mapImg = (id) => mapById(id).img;
   const nameHtml = (m) => m.en ? `<span class="nm"><b>${esc(m.en)}</b><span>${esc(m.zh)}</span></span>` : `<span class="nm zh"><b>${esc(m.zh)}</b></span>`;
   const bgStyle = (url) => (url ? ` style="background-image:url('${esc(url)}')"` : '');
 
@@ -117,7 +87,7 @@
           body: JSON.stringify({
             format,
             pool: META.maps.map(m => m.id).filter(id => pool.has(id)),
-            first: $('first').value, timer: $('timer').value, agentBans: $('agentBans').value,
+            first: $('first').value, timer: $('timer').value,
           }),
         });
         const data = await r.json();
@@ -174,13 +144,11 @@
     if (st.kind === 'map') return st.action === 'ban' ? '禁用地图' : '选择地图';
     if (st.kind === 'side') return '选择阵营';
     if (st.kind === 'decider') return '决胜图';
-    if (st.kind === 'agent') return '禁用特工';
     return '';
   }
   function stepValue(st) {
     if (!st.value) return '';
     if (st.kind === 'side') return `${SIDE_ZH[st.value]}开局 · ${mapById(S.steps[st.mapStep].value).zh}`;
-    if (st.kind === 'agent') return agentById(st.value).zh;
     return mapById(st.value).zh;
   }
 
@@ -278,6 +246,10 @@
         : `把房间号发给对手，让对方打开 ${location.host} 输入房间号加入。`;
     }
     $('adminBox').hidden = !isAdmin;
+    if (isAdmin) {
+      $('obsUrl').textContent = `${location.origin}/obs/${S.id}`;
+      $('undoBtn').disabled = !(S.status === 'running' || S.status === 'done') || !S.steps.slice(0, S.cursor).some(st => st.kind !== 'decider' && st.value);
+    }
 
     renderStrip(cur);
     renderDice();
@@ -289,13 +261,12 @@
   function renderStage(cur, myTurn) {
     const states = mapStates();
     $('mapGrid').closest('.board').hidden = S.status === 'dice';
-    const inAgent = S.status === 'running' && cur.kind === 'agent';
     const inSide = S.status === 'running' && cur.kind === 'side';
     const done = S.status === 'done';
 
     // 地图
     const grid = $('mapGrid');
-    grid.hidden = inAgent || inSide || done;
+    grid.hidden = inSide || done;
     if (!grid.hidden) {
       const canPick = myTurn && cur.kind === 'map';
       grid.innerHTML = S.config.pool.map(id => {
@@ -332,34 +303,13 @@
       };
     }
 
-    // 特工
-    const ag = $('agentGrid');
-    ag.hidden = !inAgent;
-    if (inAgent) {
-      const bans = {};
-      for (const st of S.steps) if (st.kind === 'agent' && st.value) bans[st.value] = st.team;
-      const canPick = myTurn;
-      ag.innerHTML = ROLE_ORDER.map(r => `<div class="role"><h4>${ROLE_ZH[r]}</h4><div class="agents">${
-        META.agents.filter(a => a.role === r).map(a => {
-          const b = bans[a.id];
-          const cls = 'agent' + (b ? ` banned ban-${b}` : canPick ? ' clickable' : '');
-          const img = agentImg(a.id);
-          return `<button class="${cls}" data-agent="${esc(a.id)}" ${b || !canPick ? 'tabindex="-1"' : ''}><span class="face"${bgStyle(img)}>${img ? '' : esc(a.zh[0])}</span><span>${esc(a.zh)}</span></button>`;
-        }).join('')}</div></div>`).join('');
-      ag.onclick = (e) => {
-        const b = e.target.closest('.agent.clickable'); if (!b) return;
-        confirmAct(b, b.dataset.agent, `禁用 ${agentById(b.dataset.agent).zh}`);
-      };
-    }
-
     // 结果
     const sum = $('summary');
     sum.hidden = !done;
     if (done) {
       const list = matchMaps();
-      const agentBans = S.steps.filter(s => s.kind === 'agent');
       sum.innerHTML = `
-        <div class="sum-head"><h3>比赛地图</h3><button class="btn primary small" id="copyResult">复制结果</button></div>
+        <div class="sum-head"><h3>比赛地图</h3><div class="sum-actions"><button class="btn ghost small" id="copyResult">复制文字</button><button class="btn primary small" id="makeImage">生成结果图</button></div></div>
         <div class="sum-maps">${list.map((x, i) => {
           const m = mapById(x.map);
           const sideTeam = x.side.team;
@@ -367,9 +317,9 @@
           return `<div class="sum-map"><span class="no">${i + 1}</span><div class="body"${bgStyle(mapImg(x.map))}>
             <b>${esc(m.zh)}</b>
             <p>${x.by ? `${teamSpan(x.by)} 选图` : '决胜图'} · ${sideTxt}</p></div></div>`;
-        }).join('')}</div>
-        ${agentBans.length ? `<p class="sum-bans">禁用特工：${agentBans.map(s => `${esc(agentById(s.value).zh)}（${teamSpan(s.team)}）`).join('、')}</p>` : ''}`;
+        }).join('')}</div>`;
       $('copyResult').onclick = () => copy(resultText());
+      $('makeImage').onclick = () => showResultImage();
     }
   }
 
@@ -383,8 +333,6 @@
     });
     const bans = S.steps.filter(s => s.kind === 'map' && s.action === 'ban').map(s => `${mapById(s.value).zh}(${teamName(s.team)})`);
     lines.push(`禁图：${bans.join('、')}`);
-    const ab = S.steps.filter(s => s.kind === 'agent');
-    if (ab.length) lines.push(`禁用特工：${ab.map(s => `${agentById(s.value).zh}(${teamName(s.team)})`).join('、')}`);
     return lines.join('\n');
   }
 
@@ -398,6 +346,117 @@
       const lbl = st.value ? `${stepLabel(st).replace('选择地图', '选').replace('禁用地图', '禁').replace('禁用特工', '禁').replace('选择阵营', '')} ` : '';
       return `<li class="${t} ${state}"><span class="who">${who}</span><span>${st.value ? esc(lbl) : ''}${val}</span></li>`;
     }).join('');
+  }
+
+  // ---------- 结果图 ----------
+  const loadImg = (src) => new Promise((res) => {
+    if (!src) return res(null);
+    const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src;
+  });
+  const FONT = '"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif';
+  function coverDraw(ctx, im, x, y, w, h) {
+    const r = Math.max(w / im.width, h / im.height), sw = w / r, sh = h / r;
+    ctx.drawImage(im, (im.width - sw) / 2, (im.height - sh) / 2, sw, sh, x, y, w, h);
+  }
+  function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+  function fitText(ctx, text, maxW, size, weight) {
+    let s = size; do { ctx.font = `${weight} ${s}px ${FONT}`; s -= 2; } while (ctx.measureText(text).width > maxW && s > 20);
+  }
+
+  async function showResultImage() {
+    const btn = $('makeImage'); btn.disabled = true; btn.textContent = '生成中…';
+    try {
+      const list = matchMaps();
+      const bans = S.steps.filter(s => s.kind === 'map' && s.action === 'ban');
+      const W = 1080, P = 48, cardH = 300, gap = 22;
+      const banRowH = bans.length ? 250 : 0;
+      const H = 360 + list.length * (cardH + gap) + banRowH + 110;
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const ctx = cv.getContext('2d');
+      const C = { bg: '#0f1923', panel: '#16222e', fg: '#ece8e1', muted: '#8b978f', A: '#3fd0b4', B: '#ff4655', gold: '#e8c46a' };
+      const [logo, ...imgs] = await Promise.all([loadImg('/logo-mark-v2.png'), ...list.map(x => loadImg(mapImg(x.map))), ...bans.map(b => loadImg(mapImg(b.value)))]);
+      const mapImgs = imgs.slice(0, list.length), banImgs = imgs.slice(list.length);
+
+      // 背景
+      ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(255,70,85,.06)'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(W * .55, 0); ctx.lineTo(0, H * .35); ctx.fill();
+
+      // 页眉
+      ctx.fillStyle = '#fff'; rrect(ctx, P, P, 84, 84, 14); ctx.fill();
+      if (logo) { const s = 64; ctx.drawImage(logo, P + 10, P + 10, s, s); }
+      ctx.fillStyle = C.fg; ctx.font = `800 40px ${FONT}`; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('蓝猫电竞', P + 108, P + 44);
+      ctx.fillStyle = C.muted; ctx.font = `500 24px ${FONT}`;
+      const d = new Date();
+      ctx.fillText(`无畏契约 BP 结果 · ${S.config.format.toUpperCase()} · ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, P + 108, P + 80);
+
+      // 对阵
+      const vy = 230;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = C.muted; ctx.font = `800 36px ${FONT}`; ctx.fillText('VS', W / 2, vy);
+      ctx.textAlign = 'right'; fitText(ctx, teamName('A'), 400, 52, 800); ctx.fillStyle = C.A; ctx.fillText(teamName('A'), W / 2 - 50, vy + 2);
+      ctx.textAlign = 'left'; fitText(ctx, teamName('B'), 400, 52, 800); ctx.fillStyle = C.B; ctx.fillText(teamName('B'), W / 2 + 50, vy + 2);
+      ctx.textAlign = 'center'; ctx.fillStyle = C.muted; ctx.font = `500 24px ${FONT}`;
+      if (S.dice?.winner) ctx.fillText(`摇骰子 ${S.dice.A} : ${S.dice.B} · ${teamName(S.dice.winner)} 先手`, W / 2, vy + 52);
+      ctx.textAlign = 'left';
+
+      // 比赛地图
+      let y = 330;
+      list.forEach((x, i) => {
+        const m = mapById(x.map), im = mapImgs[i];
+        ctx.save(); rrect(ctx, P, y, W - 2 * P, cardH, 16); ctx.clip();
+        if (im) coverDraw(ctx, im, P, y, W - 2 * P, cardH); else { ctx.fillStyle = C.panel; ctx.fillRect(P, y, W - 2 * P, cardH); }
+        const g = ctx.createLinearGradient(0, y, 0, y + cardH); g.addColorStop(0, 'rgba(15,25,35,.1)'); g.addColorStop(.55, 'rgba(15,25,35,.45)'); g.addColorStop(1, 'rgba(15,25,35,.95)');
+        ctx.fillStyle = g; ctx.fillRect(P, y, W - 2 * P, cardH);
+        ctx.restore();
+        const tagC = x.by ? C[x.by] : C.gold;
+        ctx.fillStyle = tagC; rrect(ctx, P + 24, y + 22, 132, 46, 6); ctx.fill();
+        ctx.fillStyle = C.bg; ctx.font = `800 26px ${FONT}`; ctx.fillText(x.by ? `第 ${i + 1} 图` : '决胜图', P + 40, y + 55);
+        ctx.fillStyle = '#fff'; ctx.font = `900 64px ${FONT}`; ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 12;
+        ctx.fillText(m.zh, P + 28, y + cardH - 76); ctx.shadowBlur = 0;
+        const atk = x.side.value === 'attack' ? x.side.team : (x.side.team === 'A' ? 'B' : 'A');
+        const parts = [[x.by ? teamName(x.by) : '决胜图', x.by ? C[x.by] : C.gold], [x.by ? ' 选图 · ' : ' · ', '#d6dbd8'], [teamName(atk), C[atk]], [' 进攻开局', '#d6dbd8']];
+        ctx.font = `600 28px ${FONT}`; let px = P + 30;
+        for (const [t, c] of parts) { ctx.fillStyle = c; ctx.fillText(t, px, y + cardH - 30); px += ctx.measureText(t).width; }
+        y += cardH + gap;
+      });
+
+      // 禁用地图
+      if (bans.length) {
+        y += 18;
+        ctx.fillStyle = C.muted; ctx.font = `700 26px ${FONT}`; ctx.fillText('禁用地图', P, y + 10);
+        y += 34;
+        const n = bans.length, bw = (W - 2 * P - (n - 1) * 14) / n, bh = Math.min(150, bw * .75);
+        bans.forEach((b, i) => {
+          const bx = P + i * (bw + 14), im = banImgs[i];
+          ctx.save(); rrect(ctx, bx, y, bw, bh, 10); ctx.clip();
+          if (im) { ctx.filter = 'grayscale(1) brightness(.55)'; coverDraw(ctx, im, bx, y, bw, bh); ctx.filter = 'none'; } else { ctx.fillStyle = C.panel; ctx.fillRect(bx, y, bw, bh); }
+          ctx.restore();
+          ctx.fillStyle = C[b.team]; ctx.fillRect(bx, y, bw, 6);
+          ctx.textAlign = 'center';
+          fitText(ctx, mapById(b.value).zh, bw - 16, 26, 800); ctx.fillStyle = '#fff'; ctx.fillText(mapById(b.value).zh, bx + bw / 2, y + bh / 2 + 6);
+          fitText(ctx, teamName(b.team) + ' 禁', bw - 8, 22, 600); ctx.fillStyle = C[b.team]; ctx.fillText(teamName(b.team) + ' 禁', bx + bw / 2, y + bh + 32);
+          ctx.textAlign = 'left';
+        });
+        y += bh + 50;
+      }
+
+      // 页脚
+      ctx.fillStyle = 'rgba(139,151,143,.35)'; ctx.fillRect(P, H - 80, W - 2 * P, 1);
+      ctx.fillStyle = C.muted; ctx.font = `500 22px ${FONT}`;
+      ctx.fillText(`房间号 ${S.id}`, P, H - 40);
+      ctx.textAlign = 'right'; ctx.fillText(location.host, W - P, H - 40); ctx.textAlign = 'left';
+
+      const url = cv.toDataURL('image/png');
+      $('resultImg').src = url;
+      $('dlImg').href = url;
+      $('dlImg').download = `BP结果_${teamName('A')}_vs_${teamName('B')}.png`;
+      $('imgModal').hidden = false;
+    } catch (e) {
+      toast('生成图片失败，请重试');
+    } finally {
+      btn.disabled = false; btn.textContent = '生成结果图';
+    }
   }
 
   // ---------- 顶部地图进度条 ----------
@@ -536,6 +595,10 @@
     });
     $('forceStart').onclick = () => ws.send(JSON.stringify({ type: 'start' }));
     let resetArmed = false;
+    $('undoBtn').onclick = () => ws?.send(JSON.stringify({ type: 'undo' }));
+    $('copyObs').onclick = () => copy($('obsUrl').textContent);
+    $('closeImg').onclick = () => { $('imgModal').hidden = true; };
+    $('imgModal').onclick = (e) => { if (e.target.id === 'imgModal') $('imgModal').hidden = true; };
     $('resetBtn').onclick = () => {
       if (!resetArmed) { resetArmed = true; $('resetHint').textContent = '再点一次确认清空所有操作'; setTimeout(() => { resetArmed = false; $('resetHint').textContent = ''; }, 3000); return; }
       resetArmed = false; $('resetHint').textContent = '';
@@ -547,9 +610,7 @@
   // ---------- 启动 ----------
   (async () => {
     META = await (await fetch('/api/meta')).json();
-    const imgs = loadImages().then(ok => { if (ok && S) render(); });
     if (location.pathname.startsWith('/r/') && roomId) initRoom();
     else initHome();
-    await imgs;
   })();
 })();

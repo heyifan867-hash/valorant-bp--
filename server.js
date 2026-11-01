@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
-const { MAPS, DEFAULT_POOL, AGENTS } = require('./data');
+const { MAPS, DEFAULT_POOL } = require('./data');
 const { createStore } = require('./persist');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -16,7 +16,6 @@ const CREATE_LIMIT_PER_HOUR = 60;          // 每个 IP 每小时最多建房数
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const MAP_IDS = new Set(MAPS.map(m => m.id));
-const AGENT_IDS = new Set(AGENTS.map(a => a.id));
 const FORMAT_PICKS = { bo1: 0, bo3: 2, bo5: 4 };
 
 const rooms = new Map();
@@ -59,13 +58,6 @@ function buildSteps(cfg) {
   }
   steps.push({ kind: 'decider' }); // 自动落定，无人操作
   steps.push({ kind: 'side', team: other(lastMapTeam), mapStep: steps.length - 1 });
-
-  // 特工禁用阶段（全局禁用，双方轮流）
-  let at = cfg.first;
-  for (let i = 0; i < cfg.agentBans * 2; i++) {
-    steps.push({ kind: 'agent', action: 'ban', team: at });
-    at = other(at);
-  }
   return steps.map(s => ({ ...s, value: null, auto: false }));
 }
 
@@ -73,13 +65,8 @@ function remainingMaps(room) {
   const used = new Set(room.steps.filter(s => (s.kind === 'map' || s.kind === 'decider') && s.value).map(s => s.value));
   return room.config.pool.filter(id => !used.has(id));
 }
-function remainingAgents(room) {
-  const used = new Set(room.steps.filter(s => s.kind === 'agent' && s.value).map(s => s.value));
-  return AGENTS.map(a => a.id).filter(id => !used.has(id));
-}
 function optionsFor(room, step) {
   if (step.kind === 'map') return remainingMaps(room);
-  if (step.kind === 'agent') return remainingAgents(room);
   if (step.kind === 'side') return ['attack', 'defense'];
   return [];
 }
@@ -91,12 +78,11 @@ function createRoom(body) {
   const minPool = FORMAT_PICKS[format] + 1;
   if (pool.length < minPool) throw new Error(`${format.toUpperCase()} 至少需要 ${minPool} 张图`);
   if (pool.length > MAPS.length) pool = pool.slice(0, MAPS.length);
-  const agentBans = Math.max(0, Math.min(4, Number(body.agentBans) | 0));
   const timer = [0, 20, 30, 45, 60, 90].includes(Number(body.timer)) ? Number(body.timer) : 30;
   const firstMode = ['A', 'B', 'random', 'dice'].includes(body.first) ? body.first : 'dice';
 
   const config = {
-    format, pool, agentBans, timer, firstMode,
+    format, pool, timer, firstMode,
     first: null,
     teamNames: { ...DEFAULT_NAMES },
   };
@@ -228,6 +214,21 @@ function armStepTimer(room, ms) {
   }, ms + 300);
 }
 
+// 房主撤销：退回到最近一次有人操作的步骤（顺带清掉之后自动落定的决胜图）
+function undoLast(room) {
+  if (room.status !== 'running' && room.status !== 'done') return false;
+  let i = room.cursor - 1;
+  while (i >= 0 && room.steps[i].kind === 'decider') i--;
+  if (i < 0) return false;
+  for (let k = i; k < room.steps.length; k++) { room.steps[k].value = null; room.steps[k].auto = false; }
+  room.cursor = i;
+  room.status = 'running';
+  room.touchedAt = Date.now();
+  clearTimeout(room.timerHandle); room.deadline = null;
+  if (room.config.timer > 0) armStepTimer(room, room.config.timer * 1000);
+  return true;
+}
+
 // 服务器重启后恢复房间：按剩余时间重新挂上倒计时
 function restoreRoom(data) {
   const room = { ...data, clients: new Set(), timerHandle: null };
@@ -313,7 +314,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
 
   if (req.method === 'GET' && url.pathname === '/api/meta') {
-    return json(res, 200, { maps: MAPS, defaultPool: DEFAULT_POOL, agents: AGENTS });
+    return json(res, 200, { maps: MAPS, defaultPool: DEFAULT_POOL });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/rooms') {
@@ -343,6 +344,9 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/r/'))) {
     return serveFile(res, path.join(PUBLIC_DIR, 'index.html'));
+  }
+  if (req.method === 'GET' && /^\/obs\/\d{6}$/.test(url.pathname)) {
+    return serveFile(res, path.join(PUBLIC_DIR, 'obs.html'));
   }
   if (req.method === 'GET') {
     const file = path.normalize(path.join(PUBLIC_DIR, url.pathname));
@@ -416,6 +420,10 @@ wss.on('connection', (ws) => {
     if (msg.type === 'roll' && (role === 'A' || role === 'B')) {
       const err = rollDice(room, role);
       if (err) return send(ws, { type: 'error', code: 'bad_action', message: err });
+      return broadcast(room);
+    }
+    if (msg.type === 'undo' && client.admin) {
+      if (!undoLast(room)) return send(ws, { type: 'error', code: 'bad_action', message: '没有可以撤销的操作' });
       return broadcast(room);
     }
     if (msg.type === 'reset' && client.admin) {

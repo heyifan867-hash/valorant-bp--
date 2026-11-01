@@ -397,3 +397,23 @@ input:focus, select:focus { border-color: var(--fg); }
 @media (max-width: 560px) { .hero-logo { height: 96px; } }
 #missing .hero { display: block; }
 #missing .hero .btn { margin-top: 8px; }
+
+/* ---------- 建房表单两列 ---------- */
+.create .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 560px) { .create .field-grid { grid-template-columns: 1fr; } }
+
+/* ---------- 结果区按钮 ---------- */
+.sum-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- 房主操作 ---------- */
+.admin { gap: 8px; }
+.admin-title { font: 600 12px/1 var(--display); letter-spacing: .12em; color: var(--muted); margin-top: 6px; }
+.admin-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.obs-row { display: flex; gap: 8px; align-items: center; width: 100%; min-width: 0; }
+.obs-row code { flex: 1; min-width: 0; font: 12px var(--mono); background: var(--bg); border: 1px solid var(--line); padding: 7px 8px; overflow-x: auto; white-space: nowrap; }
+
+/* ---------- 结果图弹窗 ---------- */
+.modal { position: fixed; inset: 0; z-index: 30; background: rgba(5,10,15,.82); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); overflow-y: auto; }
+.modal-box { background: var(--panel); border: 1px solid var(--line); padding: 16px; display: grid; gap: 12px; width: min(560px, 100%); }
+.modal-box img { width: 100%; height: auto; display: block; border-radius: 6px; -webkit-touch-callout: default; }
+.modal-box .actions { justify-content: flex-end; }

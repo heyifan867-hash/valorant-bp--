@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920">
+<title>蓝猫电竞 BP 直播画面</title>
+<link rel="stylesheet" href="/obs.css">
+</head>
+<body>
+<!-- 1920×1080 透明背景，OBS「浏览器」来源直接叠加。?pos=top 放到顶部 -->
+<div class="ov" id="ov">
+  <div class="ov-head">
+    <div class="team A"><span class="tag">A</span><b id="nA">A 方</b></div>
+    <div class="center">
+      <div class="brand"><span class="tile"><img src="/logo-mark-v2.png" alt=""></span><span>蓝猫电竞 · <em id="fmt">BO3</em></span></div>
+      <div class="status"><span id="st">等待开始</span><span class="clock" id="clock" hidden></span></div>
+    </div>
+    <div class="team B"><b id="nB">B 方</b><span class="tag">B</span></div>
+  </div>
+  <div class="slots" id="slots"></div>
+</div>
+<script src="/obs.js"></script>
+</body>
+</html>
