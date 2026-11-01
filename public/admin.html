@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>管理后台 · 蓝猫电竞 BP</title>
+<link rel="icon" href="/favicon-v2.png" type="image/png">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="回到 BP 工具首页"><span class="brand-tile"><img src="/logo-mark-v2.png" alt="" width="293" height="293"></span><span class="brand-name">蓝猫电竞</span><span class="brand-sub">管理后台</span></a>
+  <div class="topbar-right"><span id="updated" class="muted-s"></span><button class="btn ghost small" id="logoutBtn" hidden>退出登录</button></div>
+</header>
+
+<!-- 登录 -->
+<main id="login" class="wrap" hidden>
+  <form id="loginForm" class="panel login-box">
+    <h1>管理后台</h1>
+    <p class="hint">查看近 5 天的所有 BP 记录和进行中的房间。</p>
+    <label class="field"><span>管理员密码</span><input id="pwd" type="password" autocomplete="current-password" required></label>
+    <p class="error" id="loginError" hidden></p>
+    <button class="btn primary" type="submit" id="loginBtn">登录</button>
+  </form>
+</main>
+
+<!-- 后台 -->
+<main id="dash" class="wrap" hidden>
+  <section class="kpis">
+    <div class="kpi"><span>近 <b id="days">5</b> 天 BP 场数</span><strong id="kTotal">0</strong></div>
+    <div class="kpi"><span>进行中的房间</span><strong id="kLive">0</strong></div>
+    <div class="kpi"><span>最常选的地图</span><strong id="kPick">—</strong><small id="kPickN"></small></div>
+    <div class="kpi"><span>最常禁的地图</span><strong id="kBan">—</strong><small id="kBanN"></small></div>
+  </section>
+
+  <div class="dash-grid">
+    <section class="panel">
+      <div class="sec-head"><h2>地图统计</h2><div class="legend"><i class="lg pick"></i>选图 <i class="lg dec"></i>决胜 <i class="lg ban"></i>禁用</div></div>
+      <div id="mapStats" class="map-stats"></div>
+    </section>
+    <section class="panel">
+      <div class="sec-head"><h2>最近的房间</h2><span class="hint">12 小时无人使用的房间会自动清理</span></div>
+      <div id="liveRooms" class="live-rooms"></div>
+    </section>
+  </div>
+
+  <section class="panel records">
+    <div class="sec-head">
+      <h2>BP 记录</h2>
+      <p class="hint" id="retention"></p>
+    </div>
+    <div class="toolbar">
+      <input id="q" placeholder="搜索战队名或房间号" aria-label="搜索战队名或房间号">
+      <select id="fFormat" aria-label="按赛制筛选"><option value="">全部赛制</option><option value="bo1">BO1</option><option value="bo3">BO3</option><option value="bo5">BO5</option></select>
+      <button class="btn ghost small" id="exportBtn">导出 CSV</button>
+      <button class="btn ghost small danger" id="clearBtn">清空全部记录</button>
+    </div>
+    <div id="recList" class="rec-list"></div>
+  </section>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/admin.js"></script>
+</body>
+</html>

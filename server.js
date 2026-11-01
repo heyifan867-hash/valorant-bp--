@@ -19,7 +19,8 @@ const MAP_IDS = new Set(MAPS.map(m => m.id));
 const FORMAT_PICKS = { bo1: 0, bo3: 2, bo5: 4 };
 
 const rooms = new Map();
-const store = createStore({ ttlMs: ROOM_TTL_MS });
+const RECORD_TTL_MS = 5 * 24 * 3600e3;   // BP 记录保留 5 天，到期自动删除
+const store = createStore({ ttlMs: ROOM_TTL_MS, recordTtlMs: RECORD_TTL_MS });
 store.bind?.(() => [...rooms.values()]);
 const DEFAULT_NAMES = { A: 'A 方', B: 'B 方' };
 
@@ -179,6 +180,9 @@ function nextDiceRound(room) {
 
 function resetRoom(room) {
   clearTimeout(room.timerHandle);
+  room.game = (room.game || 0) + 1;   // 重置后算新的一场
+  room.undos = 0;
+  room.firstDoneAt = null;
   decideFirstUpfront(room);
   room.dice = null;
   room.cursor = 0;
@@ -197,6 +201,7 @@ function advance(room) {
   room.deadline = null;
   if (room.cursor >= room.steps.length) {
     room.status = 'done';
+    recordGame(room);
     return;
   }
   if (room.config.timer > 0) armStepTimer(room, room.config.timer * 1000);
@@ -214,6 +219,42 @@ function armStepTimer(room, ms) {
   }, ms + 300);
 }
 
+// ---------- BP 记录（后台查看） ----------
+function recordGame(room) {
+  const now = Date.now();
+  if (!room.firstDoneAt) room.firstDoneAt = now;
+  const steps = room.steps;
+  const maps = [], bans = [];
+  steps.forEach((st, i) => {
+    if (st.kind === 'map' && st.action === 'ban') bans.push({ map: st.value, team: st.team, auto: !!st.auto });
+    if ((st.kind === 'map' && st.action === 'pick') || st.kind === 'decider') {
+      const side = steps.find(x => x.kind === 'side' && x.mapStep === i);
+      const atk = side ? (side.value === 'attack' ? side.team : other(side.team)) : null;
+      maps.push({ map: st.value, by: st.kind === 'decider' ? null : st.team, sideBy: side?.team ?? null, side: side?.value ?? null, attack: atk, auto: !!(st.auto || side?.auto) });
+    }
+  });
+  const rec = {
+    id: `${room.id}-${room.game || 1}`,
+    roomId: room.id,
+    game: room.game || 1,
+    createdAt: room.createdAt,
+    finishedAt: now,
+    firstFinishedAt: room.firstDoneAt,
+    expiresAt: room.firstDoneAt + RECORD_TTL_MS,
+    format: room.config.format,
+    pool: room.config.pool,
+    timer: room.config.timer,
+    firstMode: room.config.firstMode,
+    first: room.config.first,
+    teamNames: { ...room.config.teamNames },
+    dice: room.dice ? { A: room.dice.A, B: room.dice.B, winner: room.dice.winner, ties: room.dice.ties.length } : null,
+    maps, bans,
+    autoSteps: steps.filter(s => s.auto).length,
+    undos: room.undos || 0,
+  };
+  store.saveRecord(rec);
+}
+
 // 房主撤销：退回到最近一次有人操作的步骤（顺带清掉之后自动落定的决胜图）
 function undoLast(room) {
   if (room.status !== 'running' && room.status !== 'done') return false;
@@ -223,6 +264,7 @@ function undoLast(room) {
   for (let k = i; k < room.steps.length; k++) { room.steps[k].value = null; room.steps[k].auto = false; }
   room.cursor = i;
   room.status = 'running';
+  room.undos = (room.undos || 0) + 1;
   room.touchedAt = Date.now();
   clearTimeout(room.timerHandle); room.deadline = null;
   if (room.config.timer > 0) armStepTimer(room, room.config.timer * 1000);
@@ -310,8 +352,69 @@ function serveFile(res, file) {
   });
 }
 
+// ---------- 管理后台：密码来自环境变量 ADMIN_PASSWORD，登录后发放 12 小时有效的签名令牌 ----------
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const ADMIN_TOKEN_MS = 12 * 3600e3;
+const loginLog = new Map(); // ip -> [失败时间]
+const sign = (exp) => crypto.createHmac('sha256', 'vbp-admin:' + ADMIN_PASSWORD).update(String(exp)).digest('base64url');
+function issueToken() { const exp = Date.now() + ADMIN_TOKEN_MS; return { token: `${exp}.${sign(exp)}`, exp }; }
+function checkToken(req) {
+  if (!ADMIN_PASSWORD) return false;
+  const m = (req.headers.authorization || '').match(/^Bearer (\d+)\.([\w-]+)$/);
+  if (!m || Number(m[1]) < Date.now()) return false;
+  const a = Buffer.from(sign(m[1])), b = Buffer.from(m[2]);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function readBody(req, cb) {
+  let raw = '';
+  req.on('data', c => { raw += c; if (raw.length > 10000) req.destroy(); });
+  req.on('end', () => { let body = {}; try { body = JSON.parse(raw || '{}'); } catch {} cb(body); });
+}
+function liveRooms() {
+  return [...rooms.values()].map(r => {
+    const online = { A: 0, B: 0, spec: 0 };
+    for (const c of r.clients) online[c.role]++;
+    return { id: r.id, status: r.status, format: r.config.format, teamNames: r.config.teamNames, seats: { A: !!r.tokens.A, B: !!r.tokens.B },
+      online, createdAt: r.createdAt, touchedAt: r.touchedAt, game: r.game || 1, progress: [r.steps.filter(s => s.value && s.kind !== 'decider').length, r.steps.filter(s => s.kind !== 'decider').length] };
+  }).sort((a, b) => b.touchedAt - a.touchedAt);
+}
+
+async function handleAdmin(req, res, url) {
+  if (url.pathname === '/api/admin/login' && req.method === 'POST') {
+    if (!ADMIN_PASSWORD) return json(res, 503, { error: '后台未启用：请在服务器环境变量里设置 ADMIN_PASSWORD' });
+    const ip = clientIp(req), now = Date.now();
+    const fails = (loginLog.get(ip) || []).filter(t => now - t < 15 * 60e3);
+    if (fails.length >= 8) return json(res, 429, { error: '密码错误次数太多，请 15 分钟后再试' });
+    return readBody(req, (body) => {
+      const a = Buffer.from(String(body.password || '')), b = Buffer.from(ADMIN_PASSWORD);
+      if (a.length === b.length && crypto.timingSafeEqual(a, b)) { loginLog.delete(ip); return json(res, 200, issueToken()); }
+      fails.push(now); loginLog.set(ip, fails);
+      json(res, 401, { error: '密码不对' });
+    });
+  }
+  if (!checkToken(req)) return json(res, 401, { error: '请先登录' });
+  if (url.pathname === '/api/admin/overview' && req.method === 'GET') {
+    const records = (await store.listRecords()).filter(r => r.expiresAt > Date.now()).sort((a, b) => b.finishedAt - a.finishedAt);
+    return json(res, 200, { records, rooms: liveRooms(), maps: MAPS, retentionDays: RECORD_TTL_MS / 864e5, storage: store.kind, now: Date.now() });
+  }
+  const del = url.pathname.match(/^\/api\/admin\/records\/([\w-]+)$/);
+  if (del && req.method === 'DELETE') { await store.deleteRecord(del[1]); return json(res, 200, { ok: true }); }
+  if (url.pathname === '/api/admin/records' && req.method === 'DELETE') {
+    for (const r of await store.listRecords()) await store.deleteRecord(r.id);
+    return json(res, 200, { ok: true });
+  }
+  json(res, 404, { error: 'not found' });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
+
+  if (url.pathname.startsWith('/api/admin/')) {
+    return handleAdmin(req, res, url).catch(e => json(res, 500, { error: '服务器出错：' + e.message }));
+  }
+  if (req.method === 'GET' && (url.pathname === '/admin' || url.pathname === '/admin/')) {
+    return serveFile(res, path.join(PUBLIC_DIR, 'admin.html'));
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/meta') {
     return json(res, 200, { maps: MAPS, defaultPool: DEFAULT_POOL });
