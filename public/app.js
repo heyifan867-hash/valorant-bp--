@@ -13,6 +13,11 @@
   };
   const NEED = { bo1: 2, bo3: 3, bo5: 5 };
 
+  const store = {
+    get(k) { try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} },
+  };
   let META = null;
   let IMG = { maps: {}, agents: {} };
   const mapById = (id) => META.maps.find(m => m.id === id) || { id, zh: id };
@@ -84,6 +89,23 @@
     };
     renderPool();
 
+    const code = $('joinCode');
+    code.oninput = () => { code.value = code.value.replace(/\D/g, '').slice(0, 6); $('joinError').hidden = true; };
+    $('joinForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const err = $('joinError'); err.hidden = true;
+      const v = code.value;
+      if (v.length !== 6) { err.textContent = '房间号是 6 位数字'; err.hidden = false; return; }
+      $('joinBtn').disabled = true;
+      try {
+        const r = await fetch('/api/rooms/' + v);
+        if (!r.ok) throw new Error((await r.json()).error || '房间不存在');
+        location.href = '/r/' + v;
+      } catch (ex) {
+        err.textContent = ex.message || '网络错误，请重试'; err.hidden = false; $('joinBtn').disabled = false;
+      }
+    };
+
     $('createForm').onsubmit = async (e) => {
       e.preventDefault();
       const err = $('createError'); err.hidden = true;
@@ -100,7 +122,8 @@
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || '创建失败');
-        location.href = `/r/${data.id}?k=${data.tokens.admin}`;
+        store.set('vbp-admin-' + data.id, data.adminToken);
+        location.href = `/r/${data.id}`;
       } catch (ex) {
         err.textContent = ex.message || '网络错误，请重试'; err.hidden = false;
         $('createBtn').disabled = false;
@@ -109,17 +132,22 @@
   }
 
   // ---------- 房间页 ----------
-  let ws, role = 'spec', tokens = null, S = null, clockTimer = null, skew = 0, retry = 0, prevCursor = -1;
+  let ws, role = 'spec', isAdmin = false, S = null, clockTimer = null, skew = 0, retry = 0, prevCursor = -1;
   const roomId = location.pathname.split('/')[2];
-  const token = new URLSearchParams(location.search).get('k') || '';
+  const seatKey = 'vbp-seat-' + roomId, adminKey = 'vbp-admin-' + roomId;
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${proto}://${location.host}/ws`);
-    ws.onopen = () => { retry = 0; setConn(true); ws.send(JSON.stringify({ type: 'join', room: roomId, token })); };
+    ws.onopen = () => { retry = 0; setConn(true); ws.send(JSON.stringify({ type: 'join', room: roomId, token: store.get(seatKey), adminToken: store.get(adminKey) })); };
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
-      if (msg.type === 'joined') { role = msg.role; tokens = msg.tokens || null; }
+      if (msg.type === 'joined') {
+        role = msg.role; isAdmin = !!msg.admin;
+        if (msg.token) store.set(seatKey, msg.token);
+        if (msg.released) { store.del(seatKey); toast('你已离开座位'); }
+        if (S) render();
+      }
       else if (msg.type === 'state') { S = msg.state; skew = S.serverNow - Date.now(); render(); }
       else if (msg.type === 'error') {
         if (msg.code === 'no_room') { $('room').hidden = true; $('missing').hidden = false; ws.onclose = null; ws.close(); setConn(null); }
@@ -189,7 +217,7 @@
     $('fmt').textContent = `${S.config.format.toUpperCase()} · ${S.config.pool.length} 图`;
     const rb = $('roleBadge');
     rb.className = 'badge ' + (isPlayer() ? role : '');
-    rb.textContent = isPlayer() ? `你是 ${teamName(role)}` : role === 'admin' ? '房主' : `观战 · ${S.online.spec + S.online.admin} 人`;
+    rb.textContent = isPlayer() ? `你是 ${teamName(role)}${isAdmin ? ' · 房主' : ''}` : isAdmin ? '房主 · 未入座' : `观战 · ${S.online.spec} 人在看`;
     document.title = `${teamName('A')} vs ${teamName('B')} · VETO 房间`;
 
     // 回合条
@@ -220,8 +248,18 @@
     if (!lobby.hidden) {
       for (const t of ['A', 'B']) {
         const el = $('ready' + t);
-        el.className = 'ready-card' + (S.ready[t] ? ' ok' : '');
-        el.innerHTML = `<span>${teamSpan(t)}</span><span class="st">${S.ready[t] ? '已准备' : S.online[t] ? '在线，未准备' : '还没进房间'}</span>`;
+        const mine = role === t, taken = S.seats[t];
+        el.className = 'ready-card' + (S.ready[t] ? ' ok' : '') + (mine ? ' mine' : '');
+        let st, act = '';
+        if (!taken) {
+          st = '空位';
+          if (role === 'spec') act = `<button class="btn primary small" data-claim="${t}">加入 ${esc(teamName(t))}</button>`;
+        } else {
+          st = (mine ? '你 · ' : '') + (S.ready[t] ? '已准备' : S.online[t] ? '已入座，未准备' : '已入座，暂时离线');
+          if (mine) act = `<button class="btn ghost small" data-release="${t}">离开座位</button>`;
+          else if (isAdmin) act = `<button class="btn ghost small" data-release="${t}">移出</button>`;
+        }
+        el.innerHTML = `<div class="rc-main"><span>${teamSpan(t)}</span><span class="st">${st}</span></div>${act}`;
       }
       const rbtn = $('readyBtn');
       rbtn.hidden = !isPlayer();
@@ -229,21 +267,13 @@
         rbtn.textContent = S.ready[role] ? '取消准备' : '准备';
         rbtn.onclick = () => ws.send(JSON.stringify({ type: 'ready', value: !S.ready[role] }));
       }
-      $('forceStart').hidden = role !== 'admin';
-      $('shareBox').hidden = role !== 'admin' || !tokens;
-      if (tokens) {
-        const base = `${location.origin}/r/${S.id}`;
-        const rows = [
-          [teamName('A') + ' 队长', `${base}?k=${tokens.A}`],
-          [teamName('B') + ' 队长', `${base}?k=${tokens.B}`],
-          ['观战', base],
-          ['房主（你）', `${base}?k=${tokens.admin}`],
-        ];
-        $('links').innerHTML = rows.map(([n, u]) =>
-          `<div class="link-row"><b>${esc(n)}</b><code>${esc(u)}</code><button class="btn ghost small" data-copy="${esc(u)}">复制</button></div>`).join('');
-      }
+      $('forceStart').hidden = !isAdmin;
+      $('roomCode').textContent = S.id.replace(/(\d{3})(\d{3})/, '$1 $2');
+      $('codeHint').textContent = role === 'spec'
+        ? '选一个队伍坐下，或者留在这里观战。'
+        : `把房间号发给对手，让对方打开 ${location.host} 输入房间号加入。`;
     }
-    $('adminBox').hidden = role !== 'admin';
+    $('adminBox').hidden = !isAdmin;
 
     renderStrip(cur);
     renderDice();
@@ -484,6 +514,12 @@
       const c = e.target.closest('[data-copy]'); if (c) copy(c.dataset.copy);
     });
     $('rollBtn').onclick = () => ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'roll' }));
+    $('copyCode').onclick = () => copy(S ? S.id : roomId);
+    $('lobby').addEventListener('click', (e) => {
+      const c = e.target.closest('[data-claim]'), r = e.target.closest('[data-release]');
+      if (c) ws?.send(JSON.stringify({ type: 'claim', team: c.dataset.claim }));
+      if (r) ws?.send(JSON.stringify({ type: 'release', team: r.dataset.release }));
+    });
     $('forceStart').onclick = () => ws.send(JSON.stringify({ type: 'start' }));
     let resetArmed = false;
     $('resetBtn').onclick = () => {

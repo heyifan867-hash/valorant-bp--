@@ -348,3 +348,24 @@ input:focus, select:focus { border-color: var(--fg); }
 .map.banned .nm { z-index: 2; }
 .slot .lbl .en { display: none; }
 .slot .lbl .cn { display: inline; font: 700 13px/1 var(--body); }
+
+/* ---------- 房间号 ---------- */
+.join { max-width: 760px; display: grid; gap: 12px; margin-bottom: 28px; border-left: 3px solid var(--red); }
+.join h3 { margin: 0; }
+.join-row { display: flex; gap: 10px; }
+.join-row input { flex: 1; min-width: 0; font: 700 24px/1 var(--mono); letter-spacing: .3em; padding: 12px 14px; }
+.join-row input::placeholder { font: 400 15px/1 var(--body); letter-spacing: 0; }
+.create-title { margin: 0 0 12px; color: var(--muted); }
+.code-box { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; background: var(--bg); border: 1px dashed var(--line); }
+.code-label { display: block; font: 600 12px/1 var(--display); letter-spacing: .16em; color: var(--muted); margin-bottom: 8px; }
+.code { font: 700 clamp(34px, 8vw, 46px)/1 var(--mono); letter-spacing: .12em; font-variant-numeric: tabular-nums; color: var(--fg); }
+.ready-card { min-height: 64px; }
+.ready-card .rc-main { display: grid; gap: 2px; min-width: 0; }
+.ready-card.mine { border-color: var(--gold); }
+@media (max-width: 560px) {
+  .code-box { padding: 12px 14px; }
+  .code-box .btn { flex: 1; text-align: center; }
+  .join-row .btn { padding-inline: 18px; }
+}
+.code-box .btn { white-space: nowrap; }
+@media (max-width: 560px) { .code-box .btn { flex: 0 0 auto; } }

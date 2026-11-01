@@ -97,10 +97,10 @@ function createRoom(body) {
     teamNames: { A: cleanName(body.teamA, '队伍 A'), B: cleanName(body.teamB, '队伍 B') },
   };
   let id;
-  do { id = randId(5); } while (rooms.has(id));
+  do { id = String(crypto.randomInt(100000, 1000000)); } while (rooms.has(id)); // 6 位数字房间号
   const room = {
     id, config,
-    tokens: { A: randId(12), B: randId(12), admin: randId(12) },
+    tokens: { A: null, B: null, admin: randId(12) }, // 队伍座位进房后认领
     steps: [],
     cursor: 0,
     status: 'waiting',            // waiting | dice | running | done
@@ -245,6 +245,7 @@ function publicState(room) {
     deadline: room.deadline,
     serverNow: Date.now(),
     online,
+    seats: { A: !!room.tokens.A, B: !!room.tokens.B },
   };
 }
 
@@ -296,12 +297,17 @@ const server = http.createServer((req, res) => {
       try {
         const room = createRoom(JSON.parse(raw || '{}'));
         log.push(now); createLog.set(ip, log);
-        json(res, 200, { id: room.id, tokens: room.tokens });
+        json(res, 200, { id: room.id, adminToken: room.tokens.admin });
       } catch (e) {
         json(res, 400, { error: e.message || '参数错误' });
       }
     });
     return;
+  }
+
+  const m = url.pathname.match(/^\/api\/rooms\/(\d{6})$/);
+  if (req.method === 'GET' && m) {
+    return rooms.has(m[1]) ? json(res, 200, { ok: true }) : json(res, 404, { error: '房间不存在或已过期' });
   }
 
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/r/'))) {
@@ -331,16 +337,37 @@ wss.on('connection', (ws) => {
       const room = rooms.get(String(msg.room));
       if (!room) return send(ws, { type: 'error', code: 'no_room', message: '房间不存在或已过期' });
       let role = 'spec';
-      for (const r of ['A', 'B', 'admin']) if (msg.token && msg.token === room.tokens[r]) role = r;
+      for (const r of ['A', 'B']) if (msg.token && msg.token === room.tokens[r]) role = r;
+      const admin = !!msg.adminToken && msg.adminToken === room.tokens.admin;
       if (client) client.room.clients.delete(client);
-      client = { ws, room, role };
+      client = { ws, room, role, admin };
       room.clients.add(client);
       room.touchedAt = Date.now();
-      send(ws, { type: 'joined', role, tokens: role === 'admin' ? room.tokens : undefined });
+      send(ws, { type: 'joined', role, admin });
       return broadcast(room);
     }
     if (!client) return;
     const { room, role } = client;
+
+    // 认领座位：空位才能坐，一个人只能坐一个位置
+    if (msg.type === 'claim' && (msg.team === 'A' || msg.team === 'B')) {
+      if (role !== 'spec') return send(ws, { type: 'error', code: 'bad_action', message: '你已经在队伍里了' });
+      if (room.tokens[msg.team]) return send(ws, { type: 'error', code: 'bad_action', message: '这个位置已经有人了' });
+      const token = randId(12);
+      room.tokens[msg.team] = token;
+      client.role = msg.team;
+      send(ws, { type: 'joined', role: msg.team, admin: client.admin, token });
+      return broadcast(room);
+    }
+    // 离开座位（本人）或移出座位（房主）
+    if (msg.type === 'release' && (msg.team === 'A' || msg.team === 'B')) {
+      if (!(client.admin || role === msg.team)) return;
+      if (room.status !== 'waiting' && !client.admin) return send(ws, { type: 'error', code: 'bad_action', message: '已经开始了，不能离开座位' });
+      room.tokens[msg.team] = null;
+      room.ready[msg.team] = false;
+      for (const c of room.clients) if (c.role === msg.team) { c.role = 'spec'; send(c.ws, { type: 'joined', role: 'spec', admin: c.admin, released: true }); }
+      return broadcast(room);
+    }
 
     if (msg.type === 'ready' && (role === 'A' || role === 'B')) {
       if (room.status !== 'waiting') return;
@@ -358,11 +385,11 @@ wss.on('connection', (ws) => {
       if (err) return send(ws, { type: 'error', code: 'bad_action', message: err });
       return broadcast(room);
     }
-    if (msg.type === 'reset' && role === 'admin') {
+    if (msg.type === 'reset' && client.admin) {
       resetRoom(room);
       return broadcast(room);
     }
-    if (msg.type === 'start' && role === 'admin' && room.status === 'waiting') {
+    if (msg.type === 'start' && client.admin && room.status === 'waiting') {
       room.ready = { A: true, B: true };
       startMatch(room);
       return broadcast(room);
