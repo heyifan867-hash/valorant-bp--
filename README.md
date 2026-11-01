@@ -77,10 +77,10 @@ Render 免费版每次部署、重启或休眠唤醒，内存和本地文件都�
 
 ## 自定义
 
-- **地图池、新地图、新特工**：改 `data.js`。`DEFAULT_POOL` 是建房时默认勾选的地图
+- **地图池、新地图**：改 `data.js`，地图图片放在 `public/maps/`。`DEFAULT_POOL` 是建房时默认勾选的地图
 - **BP 顺序规则**：在 `server.js` 的 `buildSteps()` 里
 - **房间保存**：每次操作都会保存。设置了环境变量 `REDIS_URL` 就存到 Redis（推荐，Render 上用免费的 Key Value）；没设置就存到 `data/rooms.json`。服务器重启、重新部署、休眠唤醒后房间自动恢复，大家的页面会自动重连。房间 12 小时没人使用会自动清理
 
 ## 说明
 
-本项目是非官方粉丝工具，与 Riot Games 无关。地图图片和特工头像在浏览器端从 valorant-api.com 加载，加载失败时自动显示文字卡片，不影响使用。
+本项目是非官方粉丝工具，与 Riot Games 无关。
