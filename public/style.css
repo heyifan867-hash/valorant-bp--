@@ -392,3 +392,6 @@ input:focus, select:focus { border-color: var(--fg); }
 .claim-form { display: flex; gap: 8px; flex: 1 1 260px; justify-content: flex-end; min-width: 0; }
 .claim-form input { flex: 1; min-width: 0; max-width: 240px; padding: 8px 10px; }
 @media (max-width: 560px) { .claim-form { flex-basis: 100%; } .claim-form input { max-width: none; } }
+.hero-logo { height: 150px; }
+.hero-logo img { display: block; }
+@media (max-width: 560px) { .hero-logo { height: 96px; } }
