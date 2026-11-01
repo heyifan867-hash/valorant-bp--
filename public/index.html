@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>VETO 房间 · 无畏契约 BP</title>
+<meta name="description" content="无畏契约在线 BP 工具：建房、发链接、两队实时禁选地图与特工。">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brand-mark">V</span><span>VETO 房间</span></a>
+  <div class="topbar-right" id="conn" hidden><span class="dot"></span><span id="connText">已连接</span></div>
+</header>
+
+<!-- 建房页 -->
+<main id="home" class="wrap" hidden>
+  <section class="hero">
+    <p class="eyebrow">VALORANT · MAP VETO</p>
+    <h1>建一个 BP 房间，<br>把链接发给对手。</h1>
+    <p class="lead">双方各拿自己的队伍链接，按赛制轮流禁图、选图、选边，可选禁用特工。所有操作实时同步，服务器判定回合，谁也改不了别人的选择。</p>
+  </section>
+
+  <form id="createForm" class="panel create">
+    <div class="field-row">
+      <label class="field"><span>A 队名</span><input id="teamA" maxlength="24" placeholder="队伍 A"></label>
+      <span class="vs">VS</span>
+      <label class="field"><span>B 队名</span><input id="teamB" maxlength="24" placeholder="队伍 B"></label>
+    </div>
+
+    <div class="field">
+      <span>赛制</span>
+      <div class="seg" id="formatSeg">
+        <button type="button" data-v="bo1">BO1</button>
+        <button type="button" data-v="bo3" class="on">BO3</button>
+        <button type="button" data-v="bo5">BO5</button>
+      </div>
+      <p class="hint" id="formatHint"></p>
+    </div>
+
+    <div class="field">
+      <span>地图池 <em id="poolCount"></em></span>
+      <div class="chips" id="poolChips"></div>
+    </div>
+
+    <div class="field-grid">
+      <label class="field"><span>先手</span>
+        <select id="first"><option value="A">A 队先手</option><option value="B">B 队先手</option><option value="random">随机（硬币）</option></select>
+      </label>
+      <label class="field"><span>每步限时</span>
+        <select id="timer"><option value="0">不限时</option><option value="20">20 秒</option><option value="30" selected>30 秒</option><option value="45">45 秒</option><option value="60">60 秒</option><option value="90">90 秒</option></select>
+      </label>
+      <label class="field"><span>每队禁用特工</span>
+        <select id="agentBans"><option value="0" selected>不禁特工</option><option value="1">1 个</option><option value="2">2 个</option><option value="3">3 个</option><option value="4">4 个</option></select>
+      </label>
+    </div>
+    <p class="hint">限时到了还没操作，系统会随机替这一方选一个。</p>
+
+    <div class="actions">
+      <p class="error" id="createError" hidden></p>
+      <button class="btn primary" id="createBtn" type="submit">创建房间</button>
+    </div>
+  </form>
+</main>
+
+<!-- 房间页 -->
+<main id="room" class="wrap" hidden>
+  <section class="scoreboard">
+    <div class="team team-A"><span class="team-tag">A</span><b id="nameA"></b><small id="statA"></small></div>
+    <div class="mid"><span id="fmt"></span><span id="roleBadge" class="badge"></span></div>
+    <div class="team team-B"><small id="statB"></small><b id="nameB"></b><span class="team-tag">B</span></div>
+  </section>
+
+  <section id="turn" class="turn">
+    <div class="turn-text"><span id="turnTitle"></span><span id="turnSub"></span></div>
+    <div class="turn-clock" id="clock" hidden></div>
+    <div class="turn-bar"><i id="bar"></i></div>
+  </section>
+
+  <section id="lobby" class="panel lobby" hidden>
+    <div id="shareBox" hidden>
+      <h3>把链接发出去</h3>
+      <p class="hint">队伍链接带有操作权限，只发给对应队伍的队长。观战链接谁都能看，不能操作。</p>
+      <div class="links" id="links"></div>
+    </div>
+    <div class="ready-row">
+      <div class="ready-card" id="readyA"></div>
+      <div class="ready-card" id="readyB"></div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="readyBtn" hidden>准备</button>
+      <button class="btn ghost" id="forceStart" hidden>不等了，直接开始</button>
+    </div>
+  </section>
+
+  <div class="board">
+    <section class="stage">
+      <div id="mapGrid" class="map-grid"></div>
+      <div id="sidePick" class="side-pick" hidden></div>
+      <div id="agentGrid" class="agent-grid" hidden></div>
+      <div id="summary" class="summary" hidden></div>
+    </section>
+    <aside class="timeline panel">
+      <h3>BP 流程</h3>
+      <ol id="steps"></ol>
+      <div class="admin" id="adminBox" hidden>
+        <button class="btn ghost small" id="resetBtn">重置房间</button>
+        <span class="hint" id="resetHint"></span>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<main id="missing" class="wrap" hidden>
+  <section class="hero"><h1>房间不存在或已过期</h1><p class="lead">房间 12 小时无人使用会自动清理，服务器重启后也会清空。</p><a class="btn primary" href="/">新建一个房间</a></section>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+<footer class="foot">非官方粉丝工具，与 Riot Games 无关。图片来自 valorant-api.com，加载失败时显示文字。</footer>
+<script src="/app.js"></script>
+</body>
+</html>
