@@ -66,7 +66,7 @@
 
     const renderPool = () => {
       $('poolChips').innerHTML = META.maps.map(m =>
-        `<button type="button" class="chip${pool.has(m.id) ? ' on' : ''}" data-id="${esc(m.id)}" aria-pressed="${pool.has(m.id)}">${esc(m.zh)}${m.en ? `<small>${esc(m.en)}</small>` : '<small>新</small>'}</button>`
+        `<button type="button" class="chip${pool.has(m.id) ? ' on' : ''}" data-id="${esc(m.id)}" aria-pressed="${pool.has(m.id)}">${esc(m.zh)}${m.en ? `<small>${esc(m.en)}</small>` : ''}</button>`
       ).join('');
       $('poolCount').textContent = `已选 ${pool.size} 张`;
       $('formatHint').textContent = FORMAT_HINT[format] + (pool.size !== 7 ? `（当前 ${pool.size} 张图，禁图次数会自动调整）` : '');
@@ -331,7 +331,7 @@
           const sideTeam = x.side.team;
           const sideTxt = `${teamSpan(sideTeam)} 选择 <b style="font-size:inherit">${SIDE_ZH[x.side.value]}</b> 开局，${teamSpan(sideTeam === 'A' ? 'B' : 'A')} ${x.side.value === 'attack' ? '防守' : '进攻'}`;
           return `<div class="sum-map"><span class="no">${i + 1}</span><div class="body"${bgStyle(mapImg(x.map))}>
-            <b>${esc(m.zh)} <small style="font-size:14px;opacity:.7">${esc(m.en)}</small></b>
+            <b>${esc(m.zh)}</b>
             <p>${x.by ? `${teamSpan(x.by)} 选图` : '决胜图'} · ${sideTxt}</p></div></div>`;
         }).join('')}</div>
         ${agentBans.length ? `<p class="sum-bans">禁用特工：${agentBans.map(s => `${esc(agentById(s.value).zh)}（${teamSpan(s.team)}）`).join('、')}</p>` : ''}`;

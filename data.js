@@ -4,7 +4,7 @@
 // 加新图：把图片放进 public/maps/，在下面加一行即可。
 
 const MAPS = [
-  { id: 'Tianshu',  zh: '天枢云阙', en: '', img: '/maps/tianshu.webp' },
+  { id: 'Tianshu',  zh: '天枢云阙', img: '/maps/tianshu.webp' },
   { id: 'Ascent',   zh: '亚海悬城' },
   { id: 'Bind',     zh: '源工重镇' },
   { id: 'Haven',    zh: '隐世修所' },
@@ -54,6 +54,6 @@ const AGENTS = [
   { id: 'Veto',      zh: '禁灭',   role: 'sentinel' },
 ];
 
-for (const m of MAPS) if (m.en === undefined) m.en = m.id;
+for (const m of MAPS) if (m.en === undefined) m.en = ''; // 只显示中文名；想显示英文名就在上面填 en
 
 module.exports = { MAPS, DEFAULT_POOL, AGENTS };

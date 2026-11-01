@@ -346,3 +346,5 @@ input:focus, select:focus { border-color: var(--fg); }
   .slot .lbl .cn { display: inline; font: 700 12px/1 var(--body); }
 }
 .map.banned .nm { z-index: 2; }
+.slot .lbl .en { display: none; }
+.slot .lbl .cn { display: inline; font: 700 13px/1 var(--body); }
