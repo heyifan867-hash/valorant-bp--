@@ -1,7 +1,10 @@
 // 地图与特工数据。更新版本（新地图、地图池轮换、新特工）时只需改这里。
-// id 用英文名，前端会用它去 valorant-api.com 匹配图片（取不到就显示纯文字卡片）。
+// id：唯一标识（一般用英文名）；en：卡片上显示的英文名，留空则只显示中文。
+// img：放在 public/maps/ 下的本地图片，优先使用；没有的会尝试从 valorant-api.com 按英文名取图，再取不到就显示纯文字卡片。
+// 加新图：把图片放进 public/maps/，在下面加一行即可。
 
 const MAPS = [
+  { id: 'Tianshu',  zh: '天枢云阙', en: '', img: '/maps/tianshu.webp' },
   { id: 'Ascent',   zh: '亚海悬城' },
   { id: 'Bind',     zh: '源工重镇' },
   { id: 'Haven',    zh: '隐世修所' },
@@ -9,10 +12,10 @@ const MAPS = [
   { id: 'Icebox',   zh: '森寒冬港' },
   { id: 'Breeze',   zh: '微风岛屿' },
   { id: 'Fracture', zh: '裂变峡谷' },
-  { id: 'Pearl',    zh: '深海明珠' },
-  { id: 'Lotus',    zh: '莲华古城' },
-  { id: 'Sunset',   zh: '日落之城' },
-  { id: 'Abyss',    zh: '幽邃地窟' },
+  { id: 'Pearl',    zh: '深海明珠', img: '/maps/pearl.webp' },
+  { id: 'Lotus',    zh: '莲华古城', img: '/maps/lotus.webp' },
+  { id: 'Sunset',   zh: '日落之城', img: '/maps/sunset.webp' },
+  { id: 'Abyss',    zh: '幽邃地窟', img: '/maps/abyss.webp' },
   { id: 'Corrode',  zh: '盐海矿镇' },
 ];
 
@@ -50,5 +53,7 @@ const AGENTS = [
   { id: 'Vyse',      zh: '维斯',   role: 'sentinel' },
   { id: 'Veto',      zh: '禁灭',   role: 'sentinel' },
 ];
+
+for (const m of MAPS) if (m.en === undefined) m.en = m.id;
 
 module.exports = { MAPS, DEFAULT_POOL, AGENTS };

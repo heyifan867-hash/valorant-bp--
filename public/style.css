@@ -303,3 +303,46 @@ input:focus, select:focus { border-color: var(--fg); }
   .ds { min-width: 70px; }
   .ds b { width: 60px; height: 68px; font-size: 42px; }
 }
+
+/* ---------- 地图卡片美化 ---------- */
+.map { border-radius: 2px; background-color: #1d2b37; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.map::before { background: linear-gradient(180deg, rgba(15,25,35,0) 35%, rgba(15,25,35,.55) 65%, rgba(15,25,35,.95)), linear-gradient(90deg, rgba(15,25,35,.35), transparent 40%); z-index: 0; }
+.map > * { z-index: 1; }
+.map .nm b { font-size: 20px; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+.map .nm span { text-shadow: 0 1px 4px rgba(0,0,0,.7); }
+.map .nm.zh b { font-family: var(--body); font-weight: 800; letter-spacing: .08em; font-size: 22px; }
+.map .tag { z-index: 2; }
+.map.banned { filter: grayscale(1) brightness(.5); }
+.map.banned::after { z-index: 1; background:
+  repeating-linear-gradient(-45deg, transparent 0 10px, rgba(255,70,85,.14) 10px 12px); }
+.map.banned .nm::after { content: "禁"; position: absolute; right: 0; bottom: 0; font: 900 34px/1 var(--body); color: var(--red); border: 3px solid var(--red); padding: 2px 6px; transform: rotate(-12deg); opacity: .9; }
+.map.picked-A, .map.picked-B, .map.decider { box-shadow: inset 0 0 0 2px currentColor, 0 0 22px -4px currentColor; }
+.map.picked-A { color: var(--A); }
+.map.picked-B { color: var(--B); }
+.map.decider { color: var(--gold); }
+.map.picked-A .nm, .map.picked-B .nm, .map.decider .nm { color: var(--fg); }
+@media (hover: hover) { .map.clickable:hover { box-shadow: 0 0 0 2px var(--gold), 0 10px 26px rgba(0,0,0,.45); } }
+.map-grid { gap: 12px; }
+.side-pick .map-wide { aspect-ratio: 21 / 8; }
+.side-pick .map-wide .nm b { font-size: 30px; }
+.sum-map .body { background-size: cover; background-position: center; }
+.slot { background-size: cover; background-position: center; }
+@media (max-width: 560px) {
+  .map-grid { gap: 8px; }
+  .map .nm { left: 8px; bottom: 6px; }
+  .map .nm b { font-size: 16px; }
+  .map .nm.zh b { font-size: 18px; }
+  .map.banned .nm::after { font-size: 24px; border-width: 2px; }
+  .side-pick .map-wide .nm b { font-size: 22px; }
+}
+/* 禁用：只把图片变灰，标签和印章保留颜色 */
+.map.banned { filter: none; }
+.map.banned::after { backdrop-filter: grayscale(1) brightness(.5); -webkit-backdrop-filter: grayscale(1) brightness(.5); background: repeating-linear-gradient(-45deg, transparent 0 10px, rgba(255,70,85,.14) 10px 12px); }
+.map.banned .nm b, .map.banned .nm span { color: #9aa3a0; }
+.map.banned .nm.zh b { color: #9aa3a0; }
+.slot .lbl .cn { display: none; }
+@media (max-width: 560px) {
+  .slot .lbl .en { display: none; }
+  .slot .lbl .cn { display: inline; font: 700 12px/1 var(--body); }
+}
+.map.banned .nm { z-index: 2; }

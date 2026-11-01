@@ -53,8 +53,9 @@
       return true;
     } catch { return false; }
   }
-  const mapImg = (id) => IMG.maps[id.toLowerCase()];
+  const mapImg = (id) => mapById(id).img || IMG.maps[id.toLowerCase()];
   const agentImg = (id) => IMG.agents[id.toLowerCase()];
+  const nameHtml = (m) => m.en ? `<span class="nm"><b>${esc(m.en)}</b><span>${esc(m.zh)}</span></span>` : `<span class="nm zh"><b>${esc(m.zh)}</b></span>`;
   const bgStyle = (url) => (url ? ` style="background-image:url('${esc(url)}')"` : '');
 
   // ---------- 建房页 ----------
@@ -65,7 +66,7 @@
 
     const renderPool = () => {
       $('poolChips').innerHTML = META.maps.map(m =>
-        `<button type="button" class="chip${pool.has(m.id) ? ' on' : ''}" data-id="${esc(m.id)}" aria-pressed="${pool.has(m.id)}">${esc(m.zh)}<small>${esc(m.id)}</small></button>`
+        `<button type="button" class="chip${pool.has(m.id) ? ' on' : ''}" data-id="${esc(m.id)}" aria-pressed="${pool.has(m.id)}">${esc(m.zh)}${m.en ? `<small>${esc(m.en)}</small>` : '<small>新</small>'}</button>`
       ).join('');
       $('poolCount').textContent = `已选 ${pool.size} 张`;
       $('formatHint').textContent = FORMAT_HINT[format] + (pool.size !== 7 ? `（当前 ${pool.size} 张图，禁图次数会自动调整）` : '');
@@ -271,7 +272,7 @@
         else if (st?.type === 'decider') { cls += ' decider'; tag = `<span class="tag D">决胜图</span>`; }
         else if (canPick) cls += ' clickable';
         const label = !st && canPick ? `aria-label="${cur.action === 'ban' ? '禁用' : '选择'} ${esc(m.zh)}"` : 'tabindex="-1"';
-        return `<button class="${cls}" data-map="${esc(id)}" ${label}${bgStyle(mapImg(id))}>${tag}<span class="nm"><b>${esc(m.id)}</b><span>${esc(m.zh)}</span></span></button>`;
+        return `<button class="${cls}" data-map="${esc(id)}" ${label}${bgStyle(mapImg(id))}>${tag}${nameHtml(m)}</button>`;
       }).join('');
       grid.onclick = (e) => {
         const b = e.target.closest('.map.clickable'); if (!b) return;
@@ -286,7 +287,7 @@
       const mid = S.steps[cur.mapStep].value; const m = mapById(mid);
       const picker = S.steps[cur.mapStep].kind === 'decider' ? '决胜图' : `${esc(teamName(S.steps[cur.mapStep].team))} 选的图`;
       side.innerHTML = `
-        <div class="map map-wide"${bgStyle(mapImg(mid))}><span class="tag D">${picker}</span><span class="nm"><b>${esc(m.id)}</b><span>${esc(m.zh)}</span></span></div>
+        <div class="map map-wide"${bgStyle(mapImg(mid))}><span class="tag D">${picker}</span>${nameHtml(m)}</div>
         <div class="side-btns">
           <button class="side-btn" data-side="attack" ${myTurn ? '' : 'disabled'}><b>进攻</b><span>上半场进攻方</span></button>
           <button class="side-btn" data-side="defense" ${myTurn ? '' : 'disabled'}><b>防守</b><span>上半场防守方</span></button>
@@ -330,7 +331,7 @@
           const sideTeam = x.side.team;
           const sideTxt = `${teamSpan(sideTeam)} 选择 <b style="font-size:inherit">${SIDE_ZH[x.side.value]}</b> 开局，${teamSpan(sideTeam === 'A' ? 'B' : 'A')} ${x.side.value === 'attack' ? '防守' : '进攻'}`;
           return `<div class="sum-map"><span class="no">${i + 1}</span><div class="body"${bgStyle(mapImg(x.map))}>
-            <b>${esc(m.zh)} <small style="font-size:14px;opacity:.7">${esc(m.id)}</small></b>
+            <b>${esc(m.zh)} <small style="font-size:14px;opacity:.7">${esc(m.en)}</small></b>
             <p>${x.by ? `${teamSpan(x.by)} 选图` : '决胜图'} · ${sideTxt}</p></div></div>`;
         }).join('')}</div>
         ${agentBans.length ? `<p class="sum-bans">禁用特工：${agentBans.map(s => `${esc(agentById(s.value).zh)}（${teamSpan(s.team)}）`).join('、')}</p>` : ''}`;
@@ -381,9 +382,10 @@
     el.innerHTML = slots.map(({ st, i }) => {
       const t = st.kind === 'decider' ? 'D' : st.team || '';
       const lbl = st.kind === 'decider' ? 'DECIDER' : st.action === 'ban' ? 'BAN' : 'PICK';
+      const lblZh = st.kind === 'decider' ? '决胜' : st.action === 'ban' ? '禁' : '选';
       const now = S.status === 'running' && i === S.cursor;
       const cls = `slot ${t} ${st.action || ''}${st.value ? ' filled' : ''}${now ? ' now' : ''}`;
-      return `<div class="${cls}"${st.value ? bgStyle(mapImg(st.value)) : ''}><span class="lbl">${lbl}</span><span class="val">${st.value ? esc(mapById(st.value).zh) : ''}</span></div>`;
+      return `<div class="${cls}"${st.value ? bgStyle(mapImg(st.value)) : ''}><span class="lbl"><span class="en">${lbl}</span><span class="cn">${lblZh}</span></span><span class="val">${st.value ? esc(mapById(st.value).zh) : ''}</span></div>`;
     }).join('');
   }
 
