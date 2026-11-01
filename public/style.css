@@ -388,3 +388,7 @@ input:focus, select:focus { border-color: var(--fg); }
   .brand-tile { width: 32px; height: 32px; }
   .brand-name { font-size: 16px; }
 }
+.ready-card { flex-wrap: wrap; }
+.claim-form { display: flex; gap: 8px; flex: 1 1 260px; justify-content: flex-end; min-width: 0; }
+.claim-form input { flex: 1; min-width: 0; max-width: 240px; padding: 8px 10px; }
+@media (max-width: 560px) { .claim-form { flex-basis: 100%; } .claim-form input { max-width: none; } }

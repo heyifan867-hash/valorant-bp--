@@ -19,6 +19,7 @@ const AGENT_IDS = new Set(AGENTS.map(a => a.id));
 const FORMAT_PICKS = { bo1: 0, bo3: 2, bo5: 4 };
 
 const rooms = new Map();
+const DEFAULT_NAMES = { A: 'A 方', B: 'B 方' };
 
 // ---------- 工具 ----------
 const randId = (bytes) => crypto.randomBytes(bytes).toString('base64url');
@@ -94,7 +95,7 @@ function createRoom(body) {
   const config = {
     format, pool, agentBans, timer, firstMode,
     first: null,
-    teamNames: { A: cleanName(body.teamA, '队伍 A'), B: cleanName(body.teamB, '队伍 B') },
+    teamNames: { ...DEFAULT_NAMES },
   };
   let id;
   do { id = String(crypto.randomInt(100000, 1000000)); } while (rooms.has(id)); // 6 位数字房间号
@@ -355,6 +356,7 @@ wss.on('connection', (ws) => {
       if (room.tokens[msg.team]) return send(ws, { type: 'error', code: 'bad_action', message: '这个位置已经有人了' });
       const token = randId(12);
       room.tokens[msg.team] = token;
+      room.config.teamNames[msg.team] = cleanName(msg.name, DEFAULT_NAMES[msg.team]);
       client.role = msg.team;
       send(ws, { type: 'joined', role: msg.team, admin: client.admin, token });
       return broadcast(room);
@@ -365,6 +367,7 @@ wss.on('connection', (ws) => {
       if (room.status !== 'waiting' && !client.admin) return send(ws, { type: 'error', code: 'bad_action', message: '已经开始了，不能离开座位' });
       room.tokens[msg.team] = null;
       room.ready[msg.team] = false;
+      if (room.status === 'waiting') room.config.teamNames[msg.team] = DEFAULT_NAMES[msg.team];
       for (const c of room.clients) if (c.role === msg.team) { c.role = 'spec'; send(c.ws, { type: 'joined', role: 'spec', admin: c.admin, released: true }); }
       return broadcast(room);
     }

@@ -115,7 +115,7 @@
         const r = await fetch('/api/rooms', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            teamA: $('teamA').value, teamB: $('teamB').value, format,
+            format,
             pool: META.maps.map(m => m.id).filter(id => pool.has(id)),
             first: $('first').value, timer: $('timer').value, agentBans: $('agentBans').value,
           }),
@@ -132,6 +132,7 @@
   }
 
   // ---------- 房间页 ----------
+  const claimDraft = {};
   let ws, role = 'spec', isAdmin = false, S = null, clockTimer = null, skew = 0, retry = 0, prevCursor = -1;
   const roomId = location.pathname.split('/')[2];
   const seatKey = 'vbp-seat-' + roomId, adminKey = 'vbp-admin-' + roomId;
@@ -252,14 +253,15 @@
         el.className = 'ready-card' + (S.ready[t] ? ' ok' : '') + (mine ? ' mine' : '');
         let st, act = '';
         if (!taken) {
-          st = '空位';
-          if (role === 'spec') act = `<button class="btn primary small" data-claim="${t}">加入 ${esc(teamName(t))}</button>`;
+          st = role === 'spec' ? '空位，填上你的战队名入座' : '空位，等待对手加入';
+          if (role === 'spec') act = `<form class="claim-form" data-claim-form="${t}"><input id="claimName${t}" maxlength="24" placeholder="你的战队名" aria-label="${t} 方战队名" value="${esc(claimDraft[t] ?? store.get('vbp-team-name'))}"><button class="btn primary small" type="submit">入座</button></form>`;
         } else {
           st = (mine ? '你 · ' : '') + (S.ready[t] ? '已准备' : S.online[t] ? '已入座，未准备' : '已入座，暂时离线');
           if (mine) act = `<button class="btn ghost small" data-release="${t}">离开座位</button>`;
           else if (isAdmin) act = `<button class="btn ghost small" data-release="${t}">移出</button>`;
         }
-        el.innerHTML = `<div class="rc-main"><span>${teamSpan(t)}</span><span class="st">${st}</span></div>${act}`;
+        const typing = !taken && role === 'spec' && el.contains(document.activeElement);
+        if (!typing) el.innerHTML = `<div class="rc-main"><span>${teamSpan(t)}</span><span class="st">${st}</span></div>${act}`;
       }
       const rbtn = $('readyBtn');
       rbtn.hidden = !isPlayer();
@@ -516,9 +518,19 @@
     $('rollBtn').onclick = () => ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'roll' }));
     $('copyCode').onclick = () => copy(S ? S.id : roomId);
     $('lobby').addEventListener('click', (e) => {
-      const c = e.target.closest('[data-claim]'), r = e.target.closest('[data-release]');
-      if (c) ws?.send(JSON.stringify({ type: 'claim', team: c.dataset.claim }));
+      const r = e.target.closest('[data-release]');
       if (r) ws?.send(JSON.stringify({ type: 'release', team: r.dataset.release }));
+    });
+    $('lobby').addEventListener('input', (e) => {
+      const f = e.target.closest('[data-claim-form]'); if (f) claimDraft[f.dataset.claimForm] = e.target.value;
+    });
+    $('lobby').addEventListener('submit', (e) => {
+      const f = e.target.closest('[data-claim-form]'); if (!f) return;
+      e.preventDefault();
+      const t = f.dataset.claimForm, name = $('claimName' + t).value.trim();
+      if (!name) { toast('先填上战队名'); $('claimName' + t).focus(); return; }
+      store.set('vbp-team-name', name);
+      ws?.send(JSON.stringify({ type: 'claim', team: t, name }));
     });
     $('forceStart').onclick = () => ws.send(JSON.stringify({ type: 'start' }));
     let resetArmed = false;
