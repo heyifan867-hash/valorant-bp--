@@ -41,7 +41,7 @@
 
     const renderPool = () => {
       $('poolChips').innerHTML = META.maps.map(m =>
-        `<button type="button" class="chip${pool.has(m.id) ? ' on' : ''}" data-id="${esc(m.id)}" aria-pressed="${pool.has(m.id)}">${esc(m.zh)}${m.en ? `<small>${esc(m.en)}</small>` : ''}</button>`
+        `<button type="button" class="chip pool-card${pool.has(m.id) ? ' on' : ''}" data-id="${esc(m.id)}" aria-pressed="${pool.has(m.id)}"${bgStyle(mapImg(m.id))}><span class="pc-name">${esc(m.zh)}</span></button>`
       ).join('');
       $('poolCount').textContent = `已选 ${pool.size} 张`;
       $('formatHint').textContent = FORMAT_HINT[format] + (pool.size !== 7 ? `（当前 ${pool.size} 张图，禁图次数会自动调整）` : '');

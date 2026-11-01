@@ -417,3 +417,18 @@ input:focus, select:focus { border-color: var(--fg); }
 .modal-box { background: var(--panel); border: 1px solid var(--line); padding: 16px; display: grid; gap: 12px; width: min(560px, 100%); }
 .modal-box img { width: 100%; height: auto; display: block; border-radius: 6px; -webkit-touch-callout: default; }
 .modal-box .actions { justify-content: flex-end; }
+
+/* ---------- 建房：地图池图片卡 ---------- */
+.pool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.chip.pool-card { position: relative; aspect-ratio: 16 / 9; max-width: 100%; padding: 0; border: 2px solid var(--line); border-radius: 4px; background: var(--bg-2) center / cover no-repeat; overflow: hidden; display: block; text-align: left; transition: border-color .15s, filter .2s, opacity .2s; }
+.chip.pool-card::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 35%, rgba(15,25,35,.92)); }
+.chip.pool-card .pc-name { position: absolute; left: 8px; right: 8px; bottom: 6px; font-size: 14px; font-weight: 700; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip.pool-card:not(.on) { filter: grayscale(1) brightness(.55); }
+.chip.pool-card.on { border-color: var(--red); background-color: var(--bg-2); }
+.chip.pool-card.on::after { content: "✓"; position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; display: grid; place-items: center; background: var(--red); color: #fff; font: 800 13px/1 var(--body); border-radius: 50%; }
+@media (hover: hover) { .chip.pool-card:not(.on):hover { filter: grayscale(.4) brightness(.8); } }
+@media (max-width: 560px) {
+  .pool-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .chip.pool-card .pc-name { font-size: 12px; left: 6px; bottom: 4px; }
+  .chip.pool-card.on::after { width: 18px; height: 18px; font-size: 11px; }
+}
