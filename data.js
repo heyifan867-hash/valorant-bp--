@@ -20,7 +20,7 @@ const MAPS = [
 ];
 
 // 创建房间时默认勾选的地图池（7 张）。按当前竞技地图池修改即可。
-const DEFAULT_POOL = ['Ascent', 'Bind', 'Haven', 'Lotus', 'Sunset', 'Abyss', 'Corrode'];
+const DEFAULT_POOL = ['Tianshu', 'Bind', 'Haven', 'Lotus', 'Sunset', 'Abyss', 'Corrode'];
 
 // role: duelist 决斗 / initiator 先锋 / controller 控场 / sentinel 哨位
 const AGENTS = [
