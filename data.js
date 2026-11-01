@@ -5,12 +5,12 @@
 
 const MAPS = [
   { id: 'Tianshu',  zh: '天枢云阙', img: '/maps/tianshu.webp' },
-  { id: 'Ascent',   zh: '亚海悬城' },
-  { id: 'Bind',     zh: '源工重镇' },
-  { id: 'Haven',    zh: '隐世修所' },
-  { id: 'Split',    zh: '霓虹町' },
+  { id: 'Ascent',   zh: '亚海悬城', img: '/maps/ascent.webp' },
+  { id: 'Bind',     zh: '源工重镇', img: '/maps/bind.webp' },
+  { id: 'Haven',    zh: '隐世修所', img: '/maps/haven.webp' },
+  { id: 'Split',    zh: '霓虹町', img: '/maps/split.webp' },
   { id: 'Icebox',   zh: '森寒冬港' },
-  { id: 'Breeze',   zh: '微风岛屿' },
+  { id: 'Breeze',   zh: '微风岛屿', img: '/maps/breeze.webp' },
   { id: 'Fracture', zh: '裂变峡谷' },
   { id: 'Pearl',    zh: '深海明珠', img: '/maps/pearl.webp' },
   { id: 'Lotus',    zh: '莲华古城', img: '/maps/lotus.webp' },
